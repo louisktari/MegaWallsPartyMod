@@ -1,0 +1,1 @@
+[{"modid":"partymod","name":"PartyMod","description":"A local party organiser with OneConfig, review tools and event controls.","version":"${version}","mcversion":"1.8.9","authorList":["Alexdoru","z"],"clientSideOnly":true}]

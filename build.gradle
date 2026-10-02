@@ -1,0 +1,29 @@
+buildscript {
+    repositories { mavenCentral(); maven { url 'https://maven.minecraftforge.net/' } }
+    dependencies { classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT' }
+}
+apply plugin: 'net.minecraftforge.gradle.forge'
+version = '2.0.4'
+group = 'fr.alexdoru.partymod'
+archivesBaseName = 'PartyMod'
+sourceCompatibility = targetCompatibility = '1.8'
+tasks.withType(JavaCompile) { options.encoding = 'UTF-8' }
+minecraft { version = '1.8.9-11.15.1.2318-1.8.9'; mappings = 'stable_22'; runDir = 'run'; makeObfSourceJar = false }
+dependencies { compile files('libs/oneconfig.jar'); testCompile 'junit:junit:4.13.2' }
+processResources {
+    inputs.property 'version', project.version
+    from(sourceSets.main.resources.srcDirs) { include 'mcmod.info'; expand version: project.version }
+    from(sourceSets.main.resources.srcDirs) { exclude 'mcmod.info' }
+}
+jar {
+    from(zipTree('libs/oneconfig-loader.jar')) { include 'cc/polyfrost/oneconfig/loader/stage0/**' }
+    from('licenses') { into 'META-INF/licenses' }
+    from('THIRD-PARTY.md') { into 'META-INF' }
+    manifest { attributes 'TweakClass': 'cc.polyfrost.oneconfig.loader.stage0.LaunchWrapperTweaker',
+        'TweakOrder': '0', 'FMLCorePluginContainsFMLMod': 'true', 'Implementation-Version': project.version }
+}
+test { testLogging { events 'failed'; exceptionFormat 'full' } }
+sourceSets { smoke { java.srcDir 'smoke/src' } }
+afterEvaluate { compileSmokeJava.classpath = sourceSets.main.output + sourceSets.main.compileClasspath }
+task smokeJar(type: Jar, dependsOn: smokeClasses) { from sourceSets.smoke.output; baseName = 'PartyModSmokeProbe' }
+reobf { smokeJar { mappingType = 'SEARGE' } }

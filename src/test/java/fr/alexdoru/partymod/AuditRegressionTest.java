@@ -1,0 +1,33 @@
+package fr.alexdoru.partymod;
+
+import fr.alexdoru.partymod.core.*;
+import fr.alexdoru.partymod.data.*;
+import com.google.gson.*;
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.File;
+import java.nio.file.Files;
+import java.lang.reflect.Field;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/** Reproductions from the original-purpose and lifecycle audit. */
+public class AuditRegressionTest {
+    private PlayerStats stats(String json){return PlayerStats.parseSummary(new JsonParser().parse(json).getAsJsonObject());}
+    private ReviewRules.Options onlyKits(){ReviewRules.Options o=new ReviewRules.Options();o.lowExperience=o.recentAccount=o.ratios=o.skins=o.activity=false;return o;}
+    private String kit="\"classes\":{\"zombie\":{\"unlocked\":true,\"kit\":5,\"ability\":5,\"passive1\":3,\"passive2\":3,\"gathering\":3}}";
+    @Test public void legendaryWithZeroGamesStillNeedsReview(){PlayerStats s=stats("{\"megaWalls\":{\"wins\":0,\"losses\":0,\"legendarySkins\":1}}");ReviewRules.Options o=onlyKits();o.kits=false;o.skins=true;assertEquals(1,ReviewRules.evaluate(s,o,1000,null).size());}
+    @Test public void experiencedNetworkPlayerRetainsOriginalKitExemption(){PlayerStats s=stats("{\"networkLevel\":101,\"megaWalls\":{\"wins\":0,\"losses\":0,"+kit+"}}");assertTrue(ReviewRules.evaluate(s,onlyKits(),1000,null).isEmpty());}
+    @Test public void questExperiencedPlayerRetainsOriginalKitExemption(){PlayerStats s=stats("{\"networkLevel\":50,\"completedQuests\":100,\"megaWalls\":{\"wins\":5,\"losses\":5,"+kit+"}}");assertTrue(ReviewRules.evaluate(s,onlyKits(),1000,null).isEmpty());}
+    @Test public void allConfiguredRatioBracketsApply(){PlayerStats s=stats("{\"megaWalls\":{\"wins\":1,\"losses\":9,\"finalKills\":50,\"finalDeaths\":10}}");ReviewRules.Options o=onlyKits();o.kits=false;o.ratios=true;o.fkd25=10;o.fkd250=3;assertEquals(1,ReviewRules.evaluate(s,o,1000,null).size());}
+    @Test public void pendingStatsCannotTriggerAutomaticRemoval(){Member m=new Member("Alice",1,1);m.ageCandidate=true;m.status=Member.Status.PENDING;m.stats=new PlayerStats();m.stats.firstLogin=100L;assertFalse(NewAccountPolicy.eligible(m,true,90,1000));}
+    @Test public void directQuestsAreAvailableToRules()throws Exception{JsonObject profile=new JsonParser().parse("{\"id\":\"00000000000000000000000000000001\",\"name\":\"Alice\"}").getAsJsonObject();JsonObject response=new JsonParser().parse("{\"success\":true,\"player\":{\"uuid\":\"00000000000000000000000000000001\",\"quests\":{\"mw\":{\"completions\":[{},{}]}}}}").getAsJsonObject();assertEquals(Integer.valueOf(2),DirectHypixel.parse(profile,response,1000).quests);}
+    @Test public void nameFallbackMergesIntoExistingUuidRecord()throws Exception{LocalStore store=new LocalStore(Files.createTempDirectory("partymod-audit").resolve("records.json").toFile());Member m=new Member("Alice",1,1);store.record(m).note="name note";store.record(m).joins=2;LocalStore.Record canonical=new LocalStore.Record();canonical.note="uuid note";canonical.blocked=true;String uuid="00000000000000000000000000000001";store.records.put("uuid:"+uuid,canonical);m.uuid=uuid;LocalStore.Record result=store.record(m);assertTrue(result.note.contains("name note"));assertTrue(result.note.contains("uuid note"));assertEquals(2,result.joins);assertEquals(1,store.records.size());}
+    @Test public void aBadCallbackCannotBreakCancellation(){DataClient client=new DataClient();try{client.configure("https://unused.invalid","",120,1);AtomicInteger calls=new AtomicInteger();client.request("Alice",r->{throw new IllegalStateException("callback");});client.request("Alice",r->calls.incrementAndGet());client.cancel();assertEquals(1,calls.get());assertEquals(0,client.queued());}finally{client.shutdown();}}
+    @Test public void cancellationKeepsTheRequestBudget()throws Exception{DataClient client=new DataClient();try{Field f=DataClient.class.getDeclaredField("nextRequest");f.setAccessible(true);long pause=System.currentTimeMillis()+60000;f.setLong(client,pause);client.cancel();assertEquals(pause,f.getLong(client));}finally{client.shutdown();}}
+    @Test public void duplicateRemovalKindsShareOneQueueSlot(){ActionQueue q=new ActionQueue();assertTrue(q.enqueue(new ActionQueue.Action(ActionQueue.Kind.REMOVE,"Alice","/p remove Alice",1,1,1)));assertFalse(q.enqueue(new ActionQueue.Action(ActionQueue.Kind.NEW_ACCOUNT_REMOVE,"Alice","/p remove Alice",1,1,2)));}
+    @Test public void transportFailureDoesNotEscapeTick(){ActionQueue q=new ActionQueue();q.enqueue(new ActionQueue.Action(ActionQueue.Kind.REMOVE,"Alice","/p remove Alice",1,1,1));AtomicInteger failures=new AtomicInteger();q.tick(2,1250,new ActionQueue.Transport(){public boolean valid(ActionQueue.Action a){return true;}public void send(String command){throw new IllegalStateException("Disconnected");}public void result(ActionQueue.Action a,String result){if(result.startsWith("Failed"))failures.incrementAndGet();}});assertEquals(1,failures.get());assertEquals(0,q.size());}
+    @Test public void dismissedWarningsAreNotDescribedAsNoFlags(){Member m=new Member("Alice",1,1);m.status=Member.Status.LOADED;m.reasons.add("Some warning");m.dismissedFingerprint=m.fingerprint();assertEquals("Warnings dismissed",m.label());}
+    @Test public void longNotesSurviveMigrationAndReload()throws Exception{File file=Files.createTempDirectory("partymod-notes").resolve("records.json").toFile();LocalStore store=new LocalStore(file);Member m=new Member("Alice",1,1);String first=String.join("",Collections.nCopies(1000,"a")),second=String.join("",Collections.nCopies(1000,"b"));store.record(m).note=first;String uuid="00000000000000000000000000000001";LocalStore.Record r=new LocalStore.Record();r.note=second;store.records.put("uuid:"+uuid,r);m.uuid=uuid;assertEquals(second,store.record(m).note);store.flush(true);LocalStore loaded=new LocalStore(file);assertEquals(second,loaded.record(m).note);assertEquals(first,loaded.record(m).migratedNote);assertEquals(first,loaded.records.get("name:alice").note);}
+    @Test public void unsavedNotesAtTheLimitCanBeRecoveredAfterFreeingSpace()throws Exception{File file=Files.createTempDirectory("partymod-limit").resolve("records.json").toFile();LocalStore store=new LocalStore(file);for(int i=0;i<2000;i++)store.record(new Member("P"+i,1,i));Member overflow=new Member("Overflow",1,2001);LocalStore.Record r=store.record(overflow);r.note="Retain until room exists";assertSame(r,store.record(overflow));assertFalse(store.stored(r));store.delete(new Member("P0",1,0));assertSame(r,store.record(overflow));assertTrue(store.stored(r));store.flush(true);assertEquals(r.note,new LocalStore(file).record(overflow).note);}
+}

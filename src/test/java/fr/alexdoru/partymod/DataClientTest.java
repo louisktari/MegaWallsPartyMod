@@ -1,0 +1,20 @@
+package fr.alexdoru.partymod;
+
+import fr.alexdoru.partymod.data.DataClient;
+import com.sun.net.httpserver.HttpServer;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DataClientTest {
+    private String summary(){return "{\"uuid\":\"00000000000000000000000000000001\",\"name\":\"Alice\",\"fetchedAt\":"+System.currentTimeMillis()+",\"megaWalls\":{\"wins\":5,\"losses\":6}}";}
+    private HttpServer server(int status,String body,AtomicInteger hits)throws Exception{HttpServer s=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);s.createContext("/partymod/v1/players/Alice",e->{hits.incrementAndGet();byte[] b=body.getBytes(StandardCharsets.UTF_8);e.sendResponseHeaders(status,b.length);e.getResponseBody().write(b);e.close();});s.start();return s;}
+    @Test public void repeatedRequestsShareOneResultAndCache()throws Exception{AtomicInteger hits=new AtomicInteger();HttpServer s=server(200,summary(),hits);DataClient client=new DataClient();try{client.configure("http://127.0.0.1:"+s.getAddress().getPort(),"test-application-token",120,60);CountDownLatch done=new CountDownLatch(2);client.request("Alice",r->{assertNotNull(r.stats);done.countDown();});client.request("Alice",r->{assertNotNull(r.stats);done.countDown();});assertTrue(done.await(4,TimeUnit.SECONDS));assertEquals(1,hits.get());AtomicBoolean cached=new AtomicBoolean();client.request("Alice",r->cached.set(r.cached));assertTrue(cached.get());assertEquals(1,hits.get());}finally{client.shutdown();s.stop(0);}}
+    @Test public void malformedResponseCompletesAsError()throws Exception{AtomicInteger hits=new AtomicInteger();HttpServer s=server(200,"not json",hits);DataClient client=new DataClient();try{client.configure("http://127.0.0.1:"+s.getAddress().getPort(),"",120,60);CountDownLatch done=new CountDownLatch(1);AtomicBoolean failed=new AtomicBoolean();client.request("Alice",r->{failed.set(r.stats==null&&!r.error.isEmpty());done.countDown();});assertTrue(done.await(4,TimeUnit.SECONDS));assertTrue(failed.get());assertEquals(0,client.queued());}finally{client.shutdown();s.stop(0);}}
+    @Test public void identityMismatchIsNotAssessed()throws Exception{AtomicInteger hits=new AtomicInteger();HttpServer s=server(200,summary().replace("Alice","Bob"),hits);DataClient client=new DataClient();try{client.configure("http://127.0.0.1:"+s.getAddress().getPort(),"",120,60);CountDownLatch done=new CountDownLatch(1);AtomicBoolean failed=new AtomicBoolean();client.request("Alice",r->{failed.set(r.stats==null);done.countDown();});assertTrue(done.await(4,TimeUnit.SECONDS));assertTrue(failed.get());}finally{client.shutdown();s.stop(0);}}
+    @Test public void cancellationDeliversExplicitOutcome()throws Exception{DataClient client=new DataClient();try{client.configure("https://never-contacted.invalid","",120,30);AtomicReference<String> result=new AtomicReference<>();client.request("Alice",r->result.set(r.error));client.cancel();assertEquals("Cancelled",result.get());assertEquals(0,client.queued());}finally{client.shutdown();}}
+    @Test public void rateLimitRetriesThenLoads()throws Exception{AtomicInteger hits=new AtomicInteger();HttpServer s=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);s.createContext("/partymod/v1/players/Alice",e->{int n=hits.incrementAndGet();byte[] b=(n==1?"{}":summary()).getBytes(StandardCharsets.UTF_8);if(n==1)e.getResponseHeaders().set("Retry-After","1");e.sendResponseHeaders(n==1?429:200,b.length);e.getResponseBody().write(b);e.close();});s.start();DataClient client=new DataClient();try{client.configure("http://127.0.0.1:"+s.getAddress().getPort(),"",120,60);CountDownLatch done=new CountDownLatch(1);AtomicBoolean loaded=new AtomicBoolean();client.request("Alice",r->{loaded.set(r.stats!=null);done.countDown();});assertTrue(done.await(9,TimeUnit.SECONDS));assertTrue(loaded.get());assertEquals(2,hits.get());}finally{client.shutdown();s.stop(0);}}
+}
