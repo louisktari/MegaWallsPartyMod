@@ -35,15 +35,24 @@ Four panels sit on your screen like extra chat windows:
 
 | Panel | Shows | Buttons |
 |---|---|---|
-| **To review** | Flagged players and why. The title flashes gold while someone is waiting. | **Kick**, **Keep**, **Trust** on each player; **Kick all** (click twice to confirm) |
-| **Party members** | Everyone in the party, colour-coded (green checked, gold flagged, aqua trusted, yellow pending) with rank, games and FKDR | **Sync**, **Re-check**, **Settings**; hover a player for **Kick**, **Trust**, **Check** |
-| **Party log** | Joins, leaves, flags and actions, with timestamps | **Clear** |
-| **Blocked this session** | Everyone removed, and why | hover a player for **Unblock** |
+| **To review** | A stat card for each flagged player, with the reasons. The title flashes gold while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice to confirm) |
+| **Party** | A stat card for every member, newest first. New joins are tagged **NEW** for a minute, and each card has a verdict badge: OK, N FLAGS, TRUSTED, checking... | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Check** |
+| **Party log** | Joins, leaves, flags and actions with timestamps; long lines wrap | **Clear** |
+| **Blocked this session** | Everyone removed, why, and who removed them | hover for **Unblock** |
+
+Each stat card reads like Hypixel. The name is coloured by rank, and the stats use traffic-light colours based on your flag thresholds: **green** is fine, **yellow** is borderline, **red** matches a flag.
+
+```
+NEW [MVP+] Halloweenify                     [OK]
+    Lvl 403 | Age 9.1y | Games 3,356
+    FKDR 1.39 | WLR 0.43 | Finals 3,780
+```
 
 Open chat (`T`), or press **`P`**, and the panels become interactive:
 
 - **Click** a button to act.
-- **Hover** a player to see their stats (rank, level, first login, games, FKDR, WLR, finals) and flag reasons.
+- **Hover** a card to see full colour-coded stats and flag reasons.
+- **Scroll** with the mouse wheel over a panel to see more entries.
 - **Drag** a panel by its title bar to move it.
 
 While you play they're display-only, so they never get in the way. Flagged players also get

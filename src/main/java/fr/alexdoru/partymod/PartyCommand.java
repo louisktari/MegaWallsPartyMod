@@ -45,7 +45,7 @@ public final class PartyCommand extends CommandBase {
                 break;
             case "remove":
             case "kick":
-                if (requireName(name)) runtime.remove(name, "Removed by you", false);
+                if (requireName(name)) runtime.remove(name, runtime.removedBy(), false);
                 break;
             case "dismiss":
                 if (requireName(name)) runtime.dismiss(name);

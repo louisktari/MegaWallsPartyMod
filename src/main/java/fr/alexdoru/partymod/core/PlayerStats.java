@@ -3,11 +3,6 @@ package fr.alexdoru.partymod.core;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
 
 /**
  * The subset of a Hypixel player profile the flag rules need. Missing values stay
@@ -22,6 +17,8 @@ public final class PlayerStats {
     public Double networkLevel;
     /** Display rank, e.g. "MVP+", or null for a player with no rank. */
     public String rank;
+    /** Hypixel colour names (e.g. "RED") for the MVP+ plus sign and the MVP++ bracket. */
+    public String plusColor, monthlyColor;
     public Integer wins, losses, finalKills, finalDeaths;
     public long fetchedAt;
 
@@ -39,41 +36,6 @@ public final class PlayerStats {
     public Double wl() {
         if (wins == null || losses == null) return null;
         return losses == 0 ? (double) wins : (double) wins / losses;
-    }
-
-    /** Short one-line summary for a member row, e.g. "[MVP+] 700g 1.50 FKDR". */
-    public String brief() {
-        if (!hasProfile) return "never on Hypixel";
-        StringBuilder b = new StringBuilder();
-        if (rank != null) b.append('[').append(rank).append("] ");
-        Integer g = games();
-        b.append(g == null ? 0 : g).append('g');
-        Double f = fkd();
-        if (f != null && g != null && g > 0) b.append(String.format(Locale.ROOT, " %.2f FKDR", f));
-        return b.toString();
-    }
-
-    /** Multi-line detail for hover tooltips. */
-    public List<String> describe(long now) {
-        List<String> lines = new ArrayList<>();
-        if (!hasProfile) {
-            lines.add("Has never joined Hypixel");
-            return lines;
-        }
-        lines.add("Rank: " + (rank == null ? "None" : rank));
-        if (networkLevel != null) lines.add(String.format(Locale.ROOT, "Network level: %.1f", networkLevel));
-        if (firstLogin != null) {
-            long days = Math.max(0, (now - firstLogin) / 86_400_000L);
-            lines.add("First login: " + new SimpleDateFormat("d MMM yyyy", Locale.ROOT).format(new Date(firstLogin))
-                    + " (" + days + "d ago)");
-        }
-        Integer g = games();
-        lines.add("MW games: " + (g == null ? "?" : g) + "  (W " + wins + " / L " + losses + ")");
-        Double f = fkd(), w = wl();
-        lines.add(String.format(Locale.ROOT, "FKDR: %s   WLR: %s", f == null ? "?" : String.format(Locale.ROOT, "%.2f", f),
-                w == null ? "?" : String.format(Locale.ROOT, "%.2f", w)));
-        lines.add("Final kills: " + finalKills + "   Final deaths: " + finalDeaths);
-        return lines;
     }
 
     /**
@@ -94,6 +56,8 @@ public final class PlayerStats {
         Double xp = number(player, "networkExp");
         if (xp != null && xp >= 0) s.networkLevel = networkLevel(xp);
         s.rank = rank(player);
+        s.plusColor = string(player, "rankPlusColor");
+        s.monthlyColor = string(player, "monthlyRankColor");
         JsonObject mw = object(object(player, "stats"), "Walls3");
         if (mw != null) {
             s.wins = integer(mw, "wins");

@@ -6,6 +6,7 @@ import fr.alexdoru.partymod.core.Flagger;
 import fr.alexdoru.partymod.core.PartyTracker;
 import fr.alexdoru.partymod.core.PartyTracker.Member;
 import fr.alexdoru.partymod.core.PartyTracker.Status;
+import fr.alexdoru.partymod.core.StatFormat;
 import fr.alexdoru.partymod.data.HypixelClient;
 import fr.alexdoru.partymod.data.TrustedStore;
 import net.minecraft.client.Minecraft;
@@ -160,7 +161,7 @@ public final class PartyRuntime {
         }
         m.status = Status.FLAGGED;
         String summary = String.join(", ", m.reasons);
-        party.log(EnumChatFormatting.GOLD + m.name + EnumChatFormatting.GRAY + " flagged: " + summary);
+        party.log(StatFormat.rankedName(m.stats, m.name) + EnumChatFormatting.GRAY + " flagged: " + EnumChatFormatting.GOLD + summary);
         if (PartyMod.config.autoRemoveFlagged && m.joinedLive) {
             remove(m.name, summary, false);
             return;
@@ -172,8 +173,8 @@ public final class PartyRuntime {
     }
 
     private void promptInChat(Member m, String summary) {
-        IChatComponent line = new ChatComponentText(PREFIX + EnumChatFormatting.GOLD + m.name
-                + EnumChatFormatting.GRAY + " looks suspicious: " + EnumChatFormatting.WHITE + summary + " ");
+        IChatComponent line = new ChatComponentText(PREFIX + StatFormat.rankedName(m.stats, m.name)
+                + EnumChatFormatting.GRAY + " looks suspicious: " + EnumChatFormatting.GOLD + summary + " ");
         line.appendSibling(button("[Block + Kick]", EnumChatFormatting.RED, "/mwp remove " + m.name,
                 "Sends /block add " + m.name + " then /p kick " + m.name));
         line.appendSibling(new ChatComponentText(" "));
@@ -227,7 +228,15 @@ public final class PartyRuntime {
         Member m = party.get(name);
         if (m != null) m.status = Status.REMOVED;
         if (!party.wasBlocked(name)) party.recordBlocked(name, reason);
-        party.log(EnumChatFormatting.RED + "Blocking + kicking " + name + EnumChatFormatting.GRAY + " (" + reason + ")");
+        String shown = m != null ? StatFormat.rankedName(m.stats, m.name) : EnumChatFormatting.WHITE + name;
+        party.log(EnumChatFormatting.RED + "Blocking + kicking " + shown + EnumChatFormatting.GRAY + " (" + reason + EnumChatFormatting.GRAY + ")");
+    }
+
+    /** "Removed by <you>" with your name in gold, for the log and blocked list. */
+    public String removedBy() {
+        Minecraft mc = Minecraft.getMinecraft();
+        String self = mc.thePlayer == null ? "you" : mc.thePlayer.getName();
+        return EnumChatFormatting.GRAY + "Removed by " + EnumChatFormatting.GOLD + self + EnumChatFormatting.GRAY;
     }
 
     public void dismiss(String name) {
@@ -242,7 +251,7 @@ public final class PartyRuntime {
 
     public void removeAllFlagged() {
         List<Member> queue = new ArrayList<>(party.toReview());
-        for (Member m : queue) remove(m.name, String.join(", ", m.reasons), false);
+        for (Member m : queue) remove(m.name, String.join(", ", m.reasons) + " - " + removedBy(), false);
         if (!queue.isEmpty()) party.log(EnumChatFormatting.RED + "Kicking all " + queue.size() + " flagged players");
     }
 
@@ -277,7 +286,7 @@ public final class PartyRuntime {
     public void removeNext() {
         List<Member> queue = party.toReview();
         if (queue.isEmpty()) chat("Nobody to review.");
-        else remove(queue.get(0).name, String.join(", ", queue.get(0).reasons), false);
+        else remove(queue.get(0).name, String.join(", ", queue.get(0).reasons) + " - " + removedBy(), false);
     }
 
     public void dismissNext() {

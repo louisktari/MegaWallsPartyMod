@@ -27,10 +27,16 @@ public final class PartyTracker {
         public PlayerStats stats;
         public final List<String> reasons = new ArrayList<>();
         public String error = "";
+        public final long joinedAt = System.currentTimeMillis();
 
         Member(String name, boolean joinedLive) {
             this.name = name;
             this.joinedLive = joinedLive;
+        }
+
+        /** Joined live within the last minute - highlighted so the host spots new arrivals. */
+        public boolean isNew(long now) {
+            return joinedLive && now - joinedAt < 60_000L;
         }
     }
 

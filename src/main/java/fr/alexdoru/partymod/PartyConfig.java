@@ -119,10 +119,10 @@ public final class PartyConfig extends Config {
     public float panelScale = 0.85f;
 
     @Slider(name = "Panel width", min = 120, max = 320, step = 5, category = "Overlays", subcategory = "Look")
-    public float panelWidth = 200;
+    public float panelWidth = 230;
 
-    @Slider(name = "Max rows per panel", min = 3, max = 25, step = 1, category = "Overlays", subcategory = "Look")
-    public float maxRows = 8;
+    @Slider(name = "Entries shown per panel (scroll for more)", min = 2, max = 25, step = 1, category = "Overlays", subcategory = "Look")
+    public float maxRows = 6;
 
     @Slider(name = "Background opacity", min = 0, max = 1, step = 0, category = "Overlays", subcategory = "Look")
     public float backgroundOpacity = 0.55f;

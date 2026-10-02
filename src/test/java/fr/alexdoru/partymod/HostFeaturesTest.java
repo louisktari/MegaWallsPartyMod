@@ -1,16 +1,12 @@
 package fr.alexdoru.partymod;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import fr.alexdoru.partymod.core.PartyTracker;
-import fr.alexdoru.partymod.core.PlayerStats;
 import fr.alexdoru.partymod.data.TrustedStore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
-import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -42,19 +38,6 @@ public class HostFeaturesTest {
         assertTrue(store.all().isEmpty());
         assertTrue(store.add("Alex"));
         assertTrue(new TrustedStore(file).isTrusted("Alex"));
-    }
-
-    @Test
-    public void statsSummaryAndTooltip() {
-        JsonObject response = new JsonParser().parse("{\"success\":true,\"player\":{\"firstLogin\":0,\"networkExp\":10000,"
-                + "\"newPackageRank\":\"MVP_PLUS\",\"stats\":{\"Walls3\":{\"wins\":3,\"losses\":1,\"final_kills\":6,\"final_deaths\":4}}}}")
-                .getAsJsonObject();
-        PlayerStats s = PlayerStats.fromHypixel("0123456789abcdef0123456789abcdef", "Steve", response, 86_400_000L * 10);
-        assertNull(s.firstLogin); // 0 means unknown, not 1970
-        assertEquals("[MVP+] 4g 1.50 FKDR", s.brief());
-        List<String> lines = s.describe(86_400_000L * 10);
-        assertEquals("Rank: MVP+", lines.get(0));
-        assertTrue(lines.toString(), lines.contains("FKDR: 1.50   WLR: 3.00"));
     }
 
     @Test
