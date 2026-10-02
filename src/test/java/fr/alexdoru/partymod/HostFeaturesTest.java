@@ -144,6 +144,16 @@ public class HostFeaturesTest {
     }
 
     @Test
+    public void rateLimitCooldownUsesServerHints() {
+        assertEquals(12_000L, fr.alexdoru.partymod.data.HypixelClient.retryDelayMs("12", null, false));
+        assertEquals(45_000L, fr.alexdoru.partymod.data.HypixelClient.retryDelayMs(null, "45", false));
+        assertEquals(60_000L, fr.alexdoru.partymod.data.HypixelClient.retryDelayMs("soon", null, false));
+        assertEquals(30_000L, fr.alexdoru.partymod.data.HypixelClient.retryDelayMs(null, null, true));
+        assertEquals(1_000L, fr.alexdoru.partymod.data.HypixelClient.retryDelayMs("0", null, false));
+        assertEquals(300_000L, fr.alexdoru.partymod.data.HypixelClient.retryDelayMs("99999", null, false));
+    }
+
+    @Test
     public void matchDetection() {
         assertTrue(MatchDetector.inMegaWallsMatch("MEGA WALLS", Arrays.asList("Walls Fall: 05:12", "Kills: 0")));
         assertTrue(MatchDetector.inMegaWallsMatch("MEGA WALLS", Arrays.asList("[R] Wither: 600")));

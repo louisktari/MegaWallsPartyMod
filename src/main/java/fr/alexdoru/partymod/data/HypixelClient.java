@@ -32,13 +32,35 @@ public final class HypixelClient {
         public final String name;
         public final PlayerStats stats;
         public final String error;
+        /** Interim update: rate limited, will retry automatically at {@link #retryAt}. */
+        public final boolean retrying;
+        public final long retryAt;
+        final boolean rateLimited;
 
         Result(String name, PlayerStats stats, String error) {
+            this(name, stats, error, false, 0, false);
+        }
+
+        private Result(String name, PlayerStats stats, String error, boolean retrying, long retryAt, boolean rateLimited) {
             this.name = name;
             this.stats = stats;
             this.error = error;
+            this.retrying = retrying;
+            this.retryAt = retryAt;
+            this.rateLimited = rateLimited;
+        }
+
+        static Result limited(String name, String error) {
+            return new Result(name, null, error, false, 0, true);
+        }
+
+        static Result retryingAt(String name, String error, long at) {
+            return new Result(name, null, error, true, at, false);
         }
     }
+
+    /** How many times a rate-limited lookup is retried before giving up. */
+    static final int MAX_RETRIES = 3;
 
     private static final class Cached {
         final PlayerStats stats;
@@ -85,6 +107,16 @@ public final class HypixelClient {
         long spacing = 60_000L / Math.max(1, requestsPerMinute);
         worker.submit(() -> {
             Result result = fetch(name, knownUuid, apiKey, spacing);
+            for (int attempt = 1; result.rateLimited && attempt <= MAX_RETRIES && !Thread.currentThread().isInterrupted(); attempt++) {
+                long at;
+                synchronized (this) {
+                    at = nextRequestAt;
+                }
+                long secs = Math.max(1, (at - System.currentTimeMillis() + 999) / 1000);
+                deliver(callback, Result.retryingAt(name, result.error + " - retrying in " + secs + "s (" + attempt + "/" + MAX_RETRIES + ")", at));
+                result = fetch(name, knownUuid, apiKey, spacing); // waits for the cooldown first
+            }
+            if (result.rateLimited) result = new Result(name, null, result.error + " - gave up after " + MAX_RETRIES + " retries");
             synchronized (this) {
                 inFlight.remove(key);
                 if (result.stats != null) {
@@ -92,13 +124,17 @@ public final class HypixelClient {
                     while (cache.size() > 500) cache.remove(cache.keySet().iterator().next());
                 }
             }
-            try {
-                callback.accept(result);
-            } catch (RuntimeException ignored) {
-                // A UI callback failure must not kill the worker.
-            }
+            deliver(callback, result);
         });
         return true;
+    }
+
+    private static void deliver(Consumer<Result> callback, Result result) {
+        try {
+            callback.accept(result);
+        } catch (RuntimeException ignored) {
+            // A UI callback failure must not kill the worker.
+        }
     }
 
     public synchronized void forget(String name) {
@@ -134,6 +170,8 @@ public final class HypixelClient {
             }
             return new Result(name, PlayerStats.fromHypixel(uuid, realName == null ? name : realName, response,
                     System.currentTimeMillis()), "");
+        } catch (RateLimited e) {
+            return Result.limited(name, e.getMessage());
         } catch (ApiError e) {
             return new Result(name, null, e.getMessage());
         } catch (IOException | RuntimeException e) {
@@ -154,7 +192,15 @@ public final class HypixelClient {
         if (wait > 0) Thread.sleep(wait);
     }
 
-    private static final class ApiError extends IOException {
+    private static final class RateLimited extends ApiError {
+        private static final long serialVersionUID = 1L;
+
+        RateLimited(String message) {
+            super(message);
+        }
+    }
+
+    private static class ApiError extends IOException {
         private static final long serialVersionUID = 1L;
 
         ApiError(String message) {
@@ -177,10 +223,11 @@ public final class HypixelClient {
             int status = c.getResponseCode();
             if (hypixelKey == null && (status == 204 || status == 404)) return null;
             if (status == 429) {
+                long waitMs = retryDelayMs(c.getHeaderField("Retry-After"), c.getHeaderField("RateLimit-Reset"), hypixelKey == null);
                 synchronized (this) {
-                    nextRequestAt = Math.max(nextRequestAt, System.currentTimeMillis() + 60_000L);
+                    nextRequestAt = Math.max(nextRequestAt, System.currentTimeMillis() + waitMs);
                 }
-                throw new ApiError(hypixelKey == null ? "Mojang rate limit hit; retry shortly" : "Hypixel rate limit hit; pausing lookups for 60s");
+                throw new RateLimited(hypixelKey == null ? "Mojang rate limit hit" : "Hypixel rate limit hit");
             }
             if (hypixelKey != null && (status == 401 || status == 403)) throw new ApiError("Hypixel rejected the API key");
             if (status != 200) throw new ApiError("HTTP " + status + " from " + url.getHost());
@@ -199,6 +246,18 @@ public final class HypixelClient {
         } finally {
             c.disconnect();
         }
+    }
+
+    /** Cooldown after a 429: the server's own hint when present, else 60s (Hypixel) / 30s (Mojang). */
+    public static long retryDelayMs(String retryAfter, String rateLimitReset, boolean mojang) {
+        for (String header : new String[]{retryAfter, rateLimitReset}) {
+            try {
+                if (header != null) return Math.max(1_000L, Math.min(300_000L, Long.parseLong(header.trim()) * 1000L));
+            } catch (NumberFormatException ignored) {
+                // fall through to the next hint / default
+            }
+        }
+        return mojang ? 30_000L : 60_000L;
     }
 
     private static Boolean bool(JsonObject o, String key) {

@@ -33,6 +33,8 @@ public final class PartyTracker {
         public String display = "";
         /** When we sent the kick; used to drop members stuck as "removing". */
         public long removedAt;
+        /** When a rate-limited lookup will be retried, or 0. */
+        public long retryAt;
         public final long joinedAt = System.currentTimeMillis();
 
         /** Rank-coloured name: from stats when known, else from the join message, else gray. */

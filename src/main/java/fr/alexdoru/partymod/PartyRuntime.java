@@ -357,6 +357,7 @@ public final class PartyRuntime {
     }
 
     private void check(Member m) {
+        m.retryAt = 0;
         m.status = trusted.isTrusted(m.name) ? Status.TRUSTED : Status.CHECKING;
         if (m.status == Status.TRUSTED) m.setFlags(new ArrayList<>());
         api.lookup(m.name, tabUuid(m.name), PartyMod.config.hypixelApiKey, (int) PartyMod.config.cacheMinutes,
@@ -365,8 +366,16 @@ public final class PartyRuntime {
     }
 
     private void onResult(Member m, HypixelClient.Result result) {
-        noteKeyStatus(result);
         if (party.get(m.name) != m) return; // left or party changed meanwhile
+        if (result.retrying) {
+            if (m.status != Status.TRUSTED) m.status = Status.CHECKING;
+            if (m.retryAt == 0) party.log(EnumChatFormatting.YELLOW + "Rate limited checking " + m.shown()
+                    + EnumChatFormatting.YELLOW + " - will retry automatically");
+            m.retryAt = result.retryAt;
+            return;
+        }
+        m.retryAt = 0;
+        noteKeyStatus(result);
         m.stats = result.stats;
         if (result.stats != null) remember(m.name, m.shown());
         if (result.stats == null && m.status != Status.TRUSTED) {
@@ -477,6 +486,10 @@ public final class PartyRuntime {
         chat("Testing your API key...");
         api.lookup(self, null, PartyMod.config.hypixelApiKey, 0, (int) PartyMod.config.requestsPerMinute,
                 result -> Minecraft.getMinecraft().addScheduledTask(() -> {
+                    if (result.retrying) {
+                        chat(EnumChatFormatting.YELLOW + result.error);
+                        return;
+                    }
                     noteKeyStatus(result);
                     if (result.stats != null) chat(EnumChatFormatting.GREEN + "API key works - looked you up as "
                             + StatFormat.rankedName(result.stats, result.stats.name) + EnumChatFormatting.GREEN + ".");

@@ -418,7 +418,10 @@ public final class Panels {
         card.title = (m.isNew(now) ? "\u00a7d\u00a7lNEW " : "") + m.shown();
         switch (m.status) {
             case CHECKING:
-                card.badge = StatFormat.YELLOW + "checking...";
+                card.badge = StatFormat.YELLOW + (m.retryAt > now ? "retrying..." : "checking...");
+                if (m.retryAt > now) {
+                    card.lines.add(StatFormat.YELLOW + "Hypixel rate limit - retrying in " + ((m.retryAt - now + 999) / 1000) + "s");
+                }
                 break;
             case UNAVAILABLE:
                 card.badge = StatFormat.YELLOW + "unchecked";
