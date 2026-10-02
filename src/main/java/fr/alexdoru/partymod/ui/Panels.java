@@ -77,6 +77,8 @@ public final class Panels {
         final List<Card> cards = new ArrayList<>();
         String empty = "Nothing yet";
         boolean alert;
+        /** Chat-style: newest entry at the bottom, scrolling up shows older ones. */
+        boolean bottomUp;
 
         Model(Id id, String title) {
             this.id = id;
@@ -165,7 +167,10 @@ public final class Panels {
         if (wheel != 0) {
             for (Map.Entry<Id, Hit> e : bounds.entrySet()) {
                 if (e.getValue().contains(x, y)) {
-                    scroll.put(e.getKey(), Math.max(0, scroll.getOrDefault(e.getKey(), 0) + (wheel < 0 ? 1 : -1)));
+                    // Wheel down shows later entries; for the chat-style log that means back towards the newest.
+                    int step = wheel < 0 ? 1 : -1;
+                    if (e.getKey() == Id.LOG) step = -step;
+                    scroll.put(e.getKey(), Math.max(0, scroll.getOrDefault(e.getKey(), 0) + step));
                     event.setCanceled(true);
                     return;
                 }
@@ -251,8 +256,11 @@ public final class Panels {
         int textWidth = width - PAD * 2;
         int maxCards = (int) c.maxRows;
 
-        int first = Math.max(0, Math.min(scroll.getOrDefault(model.id, 0), model.cards.size() - maxCards));
-        scroll.put(model.id, first);
+        int maxStart = Math.max(0, model.cards.size() - maxCards);
+        int offset = Math.max(0, Math.min(scroll.getOrDefault(model.id, 0), maxStart));
+        scroll.put(model.id, offset);
+        // Top-down panels scroll from the first entry; chat-style ones from the newest (last).
+        int first = model.bottomUp ? maxStart - offset : offset;
         List<Card> visible = model.cards.subList(first, Math.min(model.cards.size(), first + maxCards));
         List<List<String>> details = new ArrayList<>();
         for (Card card : visible) details.add(detailLines(card, fr, textWidth - 4));
@@ -407,7 +415,7 @@ public final class Panels {
     private static Card playerCard(Member m, boolean showReasons) {
         Card card = new Card();
         long now = System.currentTimeMillis();
-        card.title = (m.isNew(now) ? "\u00a7d\u00a7lNEW " : "") + StatFormat.rankedName(m.stats, m.name);
+        card.title = (m.isNew(now) ? "\u00a7d\u00a7lNEW " : "") + m.shown();
         switch (m.status) {
             case CHECKING:
                 card.badge = StatFormat.YELLOW + "checking...";
@@ -515,6 +523,9 @@ public final class Panels {
             }
             m.cards.add(card);
         }
+        // Read like chat: oldest at the top, newest at the bottom.
+        Collections.reverse(m.cards);
+        m.bottomUp = true;
         return m;
     }
 
@@ -541,7 +552,7 @@ public final class Panels {
 
     private static List<String> tooltip(Member member, long now) {
         List<String> lines = new ArrayList<>();
-        lines.add(StatFormat.rankedName(member.stats, member.name));
+        lines.add(member.shown());
         if (member.stats != null) {
             lines.addAll(StatFormat.describe(member.stats, options(), now));
         } else if (member.status == Status.CHECKING) {

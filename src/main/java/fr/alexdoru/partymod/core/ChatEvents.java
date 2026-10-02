@@ -71,6 +71,26 @@ public final class ChatEvents {
         return result;
     }
 
+    /**
+     * The player's name exactly as Hypixel coloured it in a message, including the rank
+     * prefix - e.g. "§b[MVP§c+§b] Steve" from "§b[MVP§c+§b] Steve §ejoined the party.".
+     * Returns null if the name isn't in the message.
+     */
+    public static String formattedName(String formatted, String name) {
+        if (formatted == null || name == null) return null;
+        int at = formatted.lastIndexOf(name);
+        if (at < 0) return null;
+        int colon = formatted.lastIndexOf(": ", at), bullet = formatted.lastIndexOf('\u25cf', at);
+        int start = Math.max(formatted.lastIndexOf('\n', at) + 1,
+                Math.max(colon < 0 ? 0 : colon + 2, bullet < 0 ? 0 : bullet + 1));
+        if (start > at) start = formatted.lastIndexOf('\n', at) + 1;
+        String shown = formatted.substring(start, at + name.length());
+        shown = shown.replaceAll("^((?:\u00a7.)*)\\s+", "$1");
+        while (shown.startsWith("\u00a7r")) shown = shown.substring(2);
+        shown = shown.trim();
+        return stripFormatting(shown).trim().endsWith(name) ? shown : null;
+    }
+
     public static boolean validName(String value) {
         return value != null && value.matches("[A-Za-z0-9_]{1,16}");
     }

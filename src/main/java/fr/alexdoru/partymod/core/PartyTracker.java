@@ -29,7 +29,15 @@ public final class PartyTracker {
         /** Reason texts, kept in step with {@link #flags}. */
         public final List<String> reasons = new ArrayList<>();
         public String error = "";
+        /** Name as Hypixel coloured it in the join message, used until stats arrive. */
+        public String display = "";
         public final long joinedAt = System.currentTimeMillis();
+
+        /** Rank-coloured name: from stats when known, else from the join message, else gray. */
+        public String shown() {
+            if (stats != null) return StatFormat.rankedName(stats, name);
+            return display.isEmpty() ? StatFormat.GRAY + name : display;
+        }
 
         Member(String name, boolean joinedLive) {
             this.name = name;

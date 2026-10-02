@@ -8,6 +8,7 @@ import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class ChatEventsTest {
@@ -64,6 +65,15 @@ public class ChatEventsTest {
     @Test
     public void throttleMessagesRecognised() {
         assertEquals(Type.THROTTLED, ChatEvents.parse("You are sending commands too fast! Please slow down.").type);
+    }
+
+    @Test
+    public void formattedNameKeepsHypixelRankColours() {
+        assertEquals("\u00a7b[MVP\u00a7c+\u00a7b] Steve",
+                ChatEvents.formattedName("\u00a7r\u00a7b[MVP\u00a7c+\u00a7b] Steve \u00a7r\u00a7ejoined the party.\u00a7r", "Steve"));
+        assertEquals("\u00a77Steve", ChatEvents.formattedName("\u00a79\u00a7m-----\n\u00a77Steve \u00a7ejoined the party.", "Steve"));
+        assertEquals("\u00a7a[VIP] Alex", ChatEvents.formattedName("\u00a7eParty Members: \u00a7a[VIP] Alex\u00a7a \u25cf", "Alex"));
+        assertNull(ChatEvents.formattedName("Someone else joined", "Steve"));
     }
 
     @Test

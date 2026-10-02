@@ -44,7 +44,7 @@ Four panels sit on your screen like extra chat windows:
 |---|---|---|
 | **To review** | A stat card per flagged player, strong flags first, with reasons in red or gold. The title flashes while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice) |
 | **Party** | A stat card for every member, newest first, with a verdict badge. New joins are tagged **NEW** for a minute. Shows a warning if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Check** |
-| **Party log** | Joins, leaves, flags and actions with timestamps | **Undo** on removals (10 s), **Clear** |
+| **Party log** | Joins (green), leaves (red), flags and actions, in rank colours with timestamps. Newest at the bottom, like chat. | **Undo** on removals (10 s), **Clear** |
 | **Blocked players** | Everyone you've removed (saved across sessions), why, when, and by whom | hover for **Unblock**; **Copy lists**, **Paste lists**, **Forget all** |
 
 Each stat card reads like Hypixel. The name is coloured by rank, and the stats use traffic-light colours based on your flag thresholds: **green** is fine, **yellow** is borderline, **red** matches a flag.

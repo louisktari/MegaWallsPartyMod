@@ -221,24 +221,26 @@ public final class PartyRuntime {
                 if (PartyMod.config.autoCompetitive) remove(e.value, "Cannot play competitive games", true, true);
                 break;
             case JOIN:
-                onJoin(e.value, true);
+                onJoin(e.value, true, ChatEvents.formattedName(event.message.getFormattedText(), e.value));
                 break;
             case SELF_JOIN:
                 party.clearMembers();
                 party.log("You joined " + e.value + "'s party");
                 commands.add("/p list");
                 break;
-            case MEMBER_LIST:
-                for (String name : ChatEvents.names(e.value)) onJoin(name, false);
+            case MEMBER_LIST: {
+                String formatted = event.message.getFormattedText();
+                for (String name : ChatEvents.names(e.value)) onJoin(name, false, ChatEvents.formattedName(formatted, name));
                 break;
+            }
             case LEAVE:
             case REMOVED:
                 if (isSelf(e.value)) {
                     endParty("You left the party");
                 } else {
                     Member gone = party.remove(e.value);
-                    if (gone != null) party.log(StatFormat.rankedName(gone.stats, gone.name) + EnumChatFormatting.GRAY
-                            + (e.type == ChatEvents.Type.LEAVE ? " left" : " was removed"));
+                    if (gone != null) party.log(gone.shown() + " " + (e.type == ChatEvents.Type.LEAVE
+                            ? EnumChatFormatting.RED + "left" : EnumChatFormatting.RED + "was removed"));
                 }
                 break;
             case DISBAND:
@@ -268,11 +270,12 @@ public final class PartyRuntime {
         return selfName().equalsIgnoreCase(name);
     }
 
-    private void onJoin(String name, boolean live) {
+    private void onJoin(String name, boolean live, String display) {
         if (isSelf(name)) return;
         Member m = party.add(name, live);
         if (m == null) return;
-        if (live) party.log(EnumChatFormatting.WHITE + name + EnumChatFormatting.GRAY + " joined");
+        if (display != null) m.display = display;
+        if (live) party.log(m.shown() + " " + EnumChatFormatting.GREEN + "joined");
         check(m);
     }
 
@@ -330,7 +333,7 @@ public final class PartyRuntime {
         m.status = Status.FLAGGED;
         if (!announce) return;
         String summary = String.join(", ", m.reasons);
-        party.log(StatFormat.rankedName(m.stats, m.name) + EnumChatFormatting.GRAY + " flagged: "
+        party.log(m.shown() + EnumChatFormatting.GRAY + " flagged: "
                 + (m.strong() ? EnumChatFormatting.RED : EnumChatFormatting.GOLD) + summary);
         if (PartyMod.config.autoRemoveFlagged && m.joinedLive && m.strong()) {
             remove(m.name, summary, true, false);
@@ -354,7 +357,7 @@ public final class PartyRuntime {
     }
 
     private void promptInChat(Member m, String summary) {
-        IChatComponent line = new ChatComponentText(PREFIX + StatFormat.rankedName(m.stats, m.name) + EnumChatFormatting.GRAY
+        IChatComponent line = new ChatComponentText(PREFIX + m.shown() + EnumChatFormatting.GRAY
                 + (m.strong() ? " should probably go: " + EnumChatFormatting.RED : " looks suspicious: " + EnumChatFormatting.GOLD)
                 + summary + " ");
         line.appendSibling(button("[Block + Kick]", EnumChatFormatting.RED, "/mwp remove " + m.name,
@@ -438,7 +441,7 @@ public final class PartyRuntime {
         Member m = party.get(name);
         if (m != null) m.status = Status.REMOVED;
         history.record(name, reason, automatic ? "" : selfName(), System.currentTimeMillis());
-        String shown = m != null ? StatFormat.rankedName(m.stats, m.name) : EnumChatFormatting.WHITE + name;
+        String shown = m != null ? m.shown() : EnumChatFormatting.WHITE + name;
         party.log(EnumChatFormatting.RED + "Removed " + shown + EnumChatFormatting.GRAY + " - " + describe(history.get(name)), name);
     }
 
