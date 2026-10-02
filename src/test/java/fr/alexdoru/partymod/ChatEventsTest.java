@@ -68,6 +68,13 @@ public class ChatEventsTest {
     }
 
     @Test
+    public void syncAndKickFeedbackRecognised() {
+        assertEvent("Party Members (3)", Type.MEMBER_COUNT, "3");
+        assertEquals(Type.NOT_IN_PARTY, ChatEvents.parse("That player is not in your party!").type);
+        assertEvent("[VIP] cold_feet was removed from the party because they disconnected.", Type.REMOVED, "cold_feet");
+    }
+
+    @Test
     public void formattedNameKeepsHypixelRankColours() {
         assertEquals("\u00a7b[MVP\u00a7c+\u00a7b] Steve",
                 ChatEvents.formattedName("\u00a7r\u00a7b[MVP\u00a7c+\u00a7b] Steve \u00a7r\u00a7ejoined the party.\u00a7r", "Steve"));

@@ -112,21 +112,40 @@ public final class PartyCommand extends CommandBase {
         return false;
     }
 
+    private static final String DIVIDER = "\u00a78\u00a7m                                        \u00a7r";
+
     private static void help() {
-        PartyRuntime.chat("Mega Walls Party Mod v" + PartyMod.version());
-        PartyRuntime.chat("Tip: open chat or press " + PartyMod.config.overlayKey.getDisplay()
-                + " to click, hover and drag the party panels - no commands needed.");
-        PartyRuntime.chat("/mwp remove <name> - /block add then /p kick");
-        PartyRuntime.chat("/mwp dismiss <name> - keep a flagged player");
-        PartyRuntime.chat("/mwp trust|untrust <name> - never flag / flag again");
-        PartyRuntime.chat("/mwp unblock <name> - /block remove a player");
-        PartyRuntime.chat("/mwp check <name> - re-run the stat check");
-        PartyRuntime.chat("/mwp sync - send /p list and check everyone");
-        PartyRuntime.chat("/mwp clear - clear the party log");
-        PartyRuntime.chat("/mwp export [file] - copy (or save) your trusted + blocked lists");
-        PartyRuntime.chat("/mwp import [file|<name>.json] - merge a co-host's lists (default: clipboard)");
-        PartyRuntime.chat("/mwp setkey <key> - set your Hypixel API key");
-        PartyRuntime.chat("/mwp settings - open OneConfig");
+        PartyRuntime.chat("\u00a7dCommands \u00a78(\u00a77hover a command for details\u00a78) \u00a77v" + PartyMod.version());
+        PartyRuntime.chatRaw(DIVIDER);
+        helpRow("panels", "Open the interactive party panels (same as pressing " + PartyMod.config.overlayKey.getDisplay()
+                + "). Every command below also has a button there.");
+        helpRow("remove <name>", "Sends \u00a7f/block add\u00a77, then \u00a7f/p kick\u00a77. Undo it for 10 seconds from the party log.");
+        helpRow("dismiss <name>", "Keep a flagged player in the party and take them out of the review queue.");
+        helpRow("trust <name>", "Never flag this player again. Saved across sessions.");
+        helpRow("untrust <name>", "Remove a player from your trusted list and re-check them.");
+        helpRow("unblock <name>", "Sends \u00a7f/block remove\u00a77 and forgets the removal from your blocked history.");
+        helpRow("check <name>", "Re-run the Hypixel stat check for one player.");
+        helpRow("sync", "Sends \u00a7f/p list\u00a77, checks everyone, and drops anyone who has already left.");
+        helpRow("clear", "Clear the party log panel.");
+        helpRow("export [file]", "Copy your trusted + blocked lists to the clipboard, or save \u00a7fexport-<date>.json\u00a77 with \u00a7ffile\u00a77.");
+        helpRow("import [file]", "Merge a co-host's lists from the clipboard, or the newest export file with \u00a7ffile\u00a77. Only adds, never removes.");
+        helpRow("setkey <key>", "Save your Hypixel API key and test it.");
+        helpRow("testkey", "Check that your Hypixel API key works.");
+        helpRow("settings", "Open the OneConfig settings.");
+        PartyRuntime.chatRaw(DIVIDER);
+    }
+
+    /** One EDITH-style help row: hover for the description, click to put the command in chat. */
+    private static void helpRow(String args, String detail) {
+        String label = "/mwp " + args;
+        String base = "/mwp " + args.split(" ")[0];
+        String suggest = (args.indexOf('<') >= 0 || args.indexOf('[') >= 0) ? base + " " : base;
+        net.minecraft.util.ChatComponentText row = new net.minecraft.util.ChatComponentText("  \u00a77\u00bb \u00a7e" + label);
+        row.setChatStyle(new net.minecraft.util.ChatStyle()
+                .setChatClickEvent(new net.minecraft.event.ClickEvent(net.minecraft.event.ClickEvent.Action.SUGGEST_COMMAND, suggest))
+                .setChatHoverEvent(new net.minecraft.event.HoverEvent(net.minecraft.event.HoverEvent.Action.SHOW_TEXT,
+                        new net.minecraft.util.ChatComponentText("\u00a7d" + label + "\n\u00a77" + detail + "\n\u00a78Click to put in chat"))));
+        PartyRuntime.chatComponent(row);
     }
 
     @Override

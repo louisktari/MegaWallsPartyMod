@@ -88,13 +88,13 @@ public final class StatFormat {
         }
         StringBuilder a = new StringBuilder();
         if (s.networkLevel != null) {
-            a.append(GRAY).append("Lvl ").append(atLeast(s.networkLevel, o.minNetworkLevel, o.minNetworkLevel * 3))
+            a.append(GRAY).append("Level ").append(atLeast(s.networkLevel, o.minNetworkLevel, o.minNetworkLevel * 3))
                     .append((int) Math.floor(s.networkLevel));
         }
         if (s.firstLogin != null) {
             long days = Math.max(0, (now - s.firstLogin) / 86_400_000L);
             if (a.length() > 0) a.append(sep());
-            a.append(GRAY).append("Age ").append(atLeast(days, o.newAccountDays, Math.max(180, o.newAccountDays * 2))).append(age(days));
+            a.append(GRAY).append("Hypixel age ").append(atLeast(days, o.newAccountDays, Math.max(180, o.newAccountDays * 2))).append(age(days));
         }
         Integer games = s.games();
         if (games != null) {
@@ -129,7 +129,7 @@ public final class StatFormat {
         }
         if (s.firstLogin != null) {
             long days = Math.max(0, (now - s.firstLogin) / 86_400_000L);
-            lines.add(GRAY + "Account age: " + atLeast(days, o.newAccountDays, Math.max(180, o.newAccountDays * 2))
+            lines.add(GRAY + "Hypixel account age: " + atLeast(days, o.newAccountDays, Math.max(180, o.newAccountDays * 2))
                     + age(days) + GRAY + " (" + days + " days)");
         }
         Integer games = s.games();

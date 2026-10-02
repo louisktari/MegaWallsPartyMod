@@ -51,8 +51,16 @@ public final class PartyRuntime {
     private long queueBypassUntil;
     private int ticks;
 
-    private static final String PREFIX = EnumChatFormatting.DARK_PURPLE + "[" + EnumChatFormatting.LIGHT_PURPLE + "MWP"
-            + EnumChatFormatting.DARK_PURPLE + "] " + EnumChatFormatting.GRAY;
+    /** Same branded style as EDITH: "MWP » message". */
+    static final String PREFIX = "\u00a7dMWP \u00a77\u00bb \u00a77";
+
+    /** Last colour-coded name seen per player, so the log can show ranks even after they leave. */
+    private final java.util.Map<String, String> knownNames = new java.util.HashMap<>();
+    /** Names seen during the current /p list, to drop members we missed leaving. */
+    private java.util.Set<String> syncSeen;
+    private int syncExpected;
+    private String lastKick = "";
+    private long lastKickAt;
 
     public PartyRuntime(File dataDir) {
         this.dataDir = dataDir;
@@ -179,8 +187,17 @@ public final class PartyRuntime {
     public void onTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !active()) return;
         commands.tick(System.currentTimeMillis(), (long) PartyMod.config.commandSpacing,
-                command -> Minecraft.getMinecraft().thePlayer.sendChatMessage(command));
-        if (++ticks % 20 == 0) inMatch = detectMatch();
+                command -> {
+                    if (command.startsWith("/p kick ")) {
+                        lastKick = command.substring(8);
+                        lastKickAt = System.currentTimeMillis();
+                    }
+                    Minecraft.getMinecraft().thePlayer.sendChatMessage(command);
+                });
+        if (++ticks % 20 == 0) {
+            inMatch = detectMatch();
+            dropStuckRemovals();
+        }
         if (!onboarded && ticks > 100) {
             onboarded = true;
             if (keyStatus() == KeyStatus.MISSING) {
@@ -217,7 +234,8 @@ public final class PartyRuntime {
         ChatEvents.Event e = ChatEvents.parse(event.message.getUnformattedText());
         switch (e.type) {
             case COMPETITIVE_BLOCK:
-                party.log(EnumChatFormatting.RED + e.value + EnumChatFormatting.GRAY + " cannot play competitive games");
+                remember(e.value, ChatEvents.formattedName(event.message.getFormattedText(), e.value));
+                party.log(nameOf(e.value) + EnumChatFormatting.RED + " cannot play competitive games");
                 if (PartyMod.config.autoCompetitive) remove(e.value, "Cannot play competitive games", true, true);
                 break;
             case JOIN:
@@ -228,11 +246,26 @@ public final class PartyRuntime {
                 party.log("You joined " + e.value + "'s party");
                 commands.add("/p list");
                 break;
+            case MEMBER_COUNT:
+                syncSeen = new java.util.HashSet<>();
+                syncExpected = Integer.parseInt(e.value);
+                break;
             case MEMBER_LIST: {
                 String formatted = event.message.getFormattedText();
-                for (String name : ChatEvents.names(e.value)) onJoin(name, false, ChatEvents.formattedName(formatted, name));
+                for (String name : ChatEvents.names(e.value)) {
+                    onJoin(name, false, ChatEvents.formattedName(formatted, name));
+                    if (syncSeen != null) syncSeen.add(name.toLowerCase(java.util.Locale.ROOT));
+                }
+                if (syncSeen != null && syncSeen.size() >= syncExpected) finishSync();
                 break;
             }
+            case NOT_IN_PARTY:
+                // Our /p kick hit someone who had already gone: stop showing them as "removing".
+                if (!lastKick.isEmpty() && System.currentTimeMillis() - lastKickAt < 5000 && party.remove(lastKick) != null) {
+                    party.log(nameOf(lastKick) + EnumChatFormatting.GRAY + " had already left the party");
+                }
+                lastKick = "";
+                break;
             case LEAVE:
             case REMOVED:
                 if (isSelf(e.value)) {
@@ -255,6 +288,39 @@ public final class PartyRuntime {
         }
     }
 
+    /** Kicks that never got a confirmation (e.g. they'd already gone) shouldn't linger as "removing". */
+    private void dropStuckRemovals() {
+        long now = System.currentTimeMillis();
+        List<Member> stuck = new ArrayList<>();
+        for (Member m : party.members()) {
+            if (m.status == Status.REMOVED && m.removedAt > 0 && now - m.removedAt > 15_000L && commands.size() == 0) stuck.add(m);
+        }
+        for (Member m : stuck) party.remove(m.name);
+    }
+
+    /** After a full /p list, drop anyone we still track who isn't actually in the party. */
+    private void finishSync() {
+        List<Member> gone = new ArrayList<>();
+        for (Member m : party.members()) if (!syncSeen.contains(m.name.toLowerCase(java.util.Locale.ROOT))) gone.add(m);
+        for (Member m : gone) {
+            party.remove(m.name);
+            party.log(m.shown() + EnumChatFormatting.GRAY + " is no longer in the party");
+        }
+        syncSeen = null;
+    }
+
+    private void remember(String name, String shown) {
+        if (name != null && shown != null && !shown.isEmpty()) knownNames.put(name.toLowerCase(java.util.Locale.ROOT), shown);
+    }
+
+    /** Rank-coloured name for the log, even for players who have left. */
+    public String nameOf(String name) {
+        Member m = party.get(name);
+        if (m != null) return m.shown();
+        String known = knownNames.get(name.toLowerCase(java.util.Locale.ROOT));
+        return known != null ? known : EnumChatFormatting.GRAY + name;
+    }
+
     private void endParty(String reason) {
         if (party.members().isEmpty()) return;
         party.clearMembers();
@@ -275,6 +341,7 @@ public final class PartyRuntime {
         Member m = party.add(name, live);
         if (m == null) return;
         if (display != null) m.display = display;
+        remember(name, display);
         if (live) party.log(m.shown() + " " + EnumChatFormatting.GREEN + "joined");
         check(m);
     }
@@ -301,10 +368,11 @@ public final class PartyRuntime {
         noteKeyStatus(result);
         if (party.get(m.name) != m) return; // left or party changed meanwhile
         m.stats = result.stats;
+        if (result.stats != null) remember(m.name, m.shown());
         if (result.stats == null && m.status != Status.TRUSTED) {
             m.status = Status.UNAVAILABLE;
             m.error = result.error;
-            party.log(EnumChatFormatting.YELLOW + "Could not check " + m.name + ": " + result.error);
+            party.log(EnumChatFormatting.YELLOW + "Could not check " + m.shown() + EnumChatFormatting.YELLOW + ": " + result.error);
             return;
         }
         evaluate(m, true);
@@ -439,9 +507,12 @@ public final class PartyRuntime {
         if (urgent) commands.addUrgent(pair);
         else commands.add(pair);
         Member m = party.get(name);
-        if (m != null) m.status = Status.REMOVED;
+        if (m != null) {
+            m.status = Status.REMOVED;
+            m.removedAt = System.currentTimeMillis();
+        }
         history.record(name, reason, automatic ? "" : selfName(), System.currentTimeMillis());
-        String shown = m != null ? m.shown() : EnumChatFormatting.WHITE + name;
+        String shown = nameOf(name);
         party.log(EnumChatFormatting.RED + "Removed " + shown + EnumChatFormatting.GRAY + " - " + describe(history.get(name)), name);
     }
 
@@ -464,7 +535,7 @@ public final class PartyRuntime {
         if (m != null && kickPending) {
             m.status = Status.DISMISSED;
         }
-        party.log(EnumChatFormatting.GREEN + "Undid removal of " + name + (kickPending ? "" : " - re-invited"));
+        party.log(EnumChatFormatting.GREEN + "Undid removal of " + nameOf(name) + EnumChatFormatting.GREEN + (kickPending ? "" : " - re-invited"));
     }
 
     public void dismiss(String name) {
@@ -474,7 +545,7 @@ public final class PartyRuntime {
             return;
         }
         m.status = Status.DISMISSED;
-        party.log(name + " kept in party");
+        party.log(nameOf(name) + EnumChatFormatting.GREEN + " kept in party");
     }
 
     public void removeAllFlagged() {
@@ -491,7 +562,7 @@ public final class PartyRuntime {
             m.status = Status.TRUSTED;
             m.setFlags(new ArrayList<>());
         }
-        party.log(EnumChatFormatting.AQUA + name + EnumChatFormatting.GRAY + " trusted - never flagged again");
+        party.log(nameOf(name) + EnumChatFormatting.AQUA + " trusted" + EnumChatFormatting.GRAY + " - never flagged again");
     }
 
     public void untrust(String name) {
@@ -500,7 +571,7 @@ public final class PartyRuntime {
             return;
         }
         PartyMod.config.syncTrustedText(trusted.all());
-        party.log(name + " removed from trusted list");
+        party.log(nameOf(name) + EnumChatFormatting.GRAY + " removed from trusted list");
         if (party.get(name) != null) recheck(name);
     }
 
@@ -508,7 +579,7 @@ public final class PartyRuntime {
         if (!ChatEvents.validName(name)) return;
         commands.add("/block remove " + name);
         history.remove(name);
-        party.log(EnumChatFormatting.GREEN + "Unblocked " + name);
+        party.log(EnumChatFormatting.GREEN + "Unblocked " + nameOf(name));
     }
 
     public void clearHistory() {
@@ -588,6 +659,18 @@ public final class PartyRuntime {
 
     public static void chat(String text) {
         chat(new ChatComponentText(PREFIX + text));
+    }
+
+    /** Unprefixed line (dividers). */
+    public static void chatRaw(String text) {
+        chat(new ChatComponentText(text));
+    }
+
+    /** Prefixed component (clickable help rows). */
+    public static void chatComponent(IChatComponent component) {
+        IChatComponent line = new ChatComponentText(PREFIX);
+        line.appendSibling(component);
+        chat(line);
     }
 
     private static void chat(IChatComponent component) {

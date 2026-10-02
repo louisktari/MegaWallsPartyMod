@@ -39,8 +39,8 @@ public class StatFormatTest {
                 + "\"stats\":{\"Walls3\":{\"wins\":2,\"losses\":3,\"final_kills\":1,\"final_deaths\":5}}}");
         List<String> card = StatFormat.card(fresh, new Flagger.Options(), NOW);
         assertEquals(2, card.size());
-        assertTrue(card.get(0), card.get(0).contains("Lvl \u00a7c1"));
-        assertTrue(card.get(0), card.get(0).contains("Age \u00a7c3d"));
+        assertTrue(card.get(0), card.get(0).contains("Level \u00a7c1"));
+        assertTrue(card.get(0), card.get(0).contains("Hypixel age \u00a7c3d"));
         assertTrue(card.get(0), card.get(0).contains("Games \u00a7c5"));
         // Ratios on 5 games are not judged.
         assertTrue(card.get(1), card.get(1).contains("FKDR \u00a770.20"));
@@ -51,7 +51,7 @@ public class StatFormatTest {
         PlayerStats vet = stats("{\"firstLogin\":" + (NOW - 1200 * DAY) + ",\"networkExp\":5000000,\"newPackageRank\":\"MVP_PLUS\","
                 + "\"stats\":{\"Walls3\":{\"wins\":300,\"losses\":400,\"final_kills\":900,\"final_deaths\":600}}}");
         List<String> card = StatFormat.card(vet, new Flagger.Options(), NOW);
-        assertTrue(card.get(0), card.get(0).contains("Age \u00a7a3.3y"));
+        assertTrue(card.get(0), card.get(0).contains("Hypixel age \u00a7a3.3y"));
         assertTrue(card.get(0), card.get(0).contains("Games \u00a7a700"));
         assertTrue(card.get(1), card.get(1).contains("FKDR \u00a7a1.50"));
         assertTrue(card.get(1), card.get(1).contains("Finals \u00a7f900"));

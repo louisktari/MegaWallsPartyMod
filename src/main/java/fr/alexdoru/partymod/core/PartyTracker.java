@@ -31,6 +31,8 @@ public final class PartyTracker {
         public String error = "";
         /** Name as Hypixel coloured it in the join message, used until stats arrive. */
         public String display = "";
+        /** When we sent the kick; used to drop members stuck as "removing". */
+        public long removedAt;
         public final long joinedAt = System.currentTimeMillis();
 
         /** Rank-coloured name: from stats when known, else from the join message, else gray. */

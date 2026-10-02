@@ -51,7 +51,7 @@ Each stat card reads like Hypixel. The name is coloured by rank, and the stats u
 
 ```
 NEW [MVP+] Halloweenify                     [OK]
-    Lvl 403 | Age 9.1y | Games 3,356
+    Level 403 | Hypixel age 9.1y | Games 3,356
     FKDR 1.39 | WLR 0.43 | Finals 3,780
 ```
 

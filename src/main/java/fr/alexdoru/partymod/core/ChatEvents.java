@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  */
 public final class ChatEvents {
 
-    public enum Type { JOIN, SELF_JOIN, LEAVE, REMOVED, MEMBER_LIST, DISBAND, COMPETITIVE_BLOCK, THROTTLED, NONE }
+    public enum Type { JOIN, SELF_JOIN, LEAVE, REMOVED, MEMBER_COUNT, MEMBER_LIST, NOT_IN_PARTY, DISBAND, COMPETITIVE_BLOCK, THROTTLED, NONE }
 
     public static final class Event {
         public final Type type;
@@ -29,7 +29,8 @@ public final class ChatEvents {
     private static final Pattern JOIN = Pattern.compile("^" + NAME + " joined the party\\.$");
     private static final Pattern SELF_JOIN = Pattern.compile("^You have joined " + NAME + "'s? party!$");
     private static final Pattern LEAVE = Pattern.compile("^" + NAME + " has left the party\\.$");
-    private static final Pattern REMOVED = Pattern.compile("^" + NAME + " (?:has been removed from the party|was removed from your party because they disconnected)\\.$");
+    private static final Pattern REMOVED = Pattern.compile("^" + NAME + " (?:has been removed from the party|was removed from (?:your|the) party because they disconnected)\\.$");
+    private static final Pattern MEMBER_COUNT = Pattern.compile("^Party Members \\((\\d{1,3})\\)$");
     private static final Pattern MEMBER_LIST = Pattern.compile("^Party (?:Leader|Moderators|Members): (.+)$");
     private static final Pattern COMPETITIVE = Pattern.compile("^You cannot queue for this mode due to " + NAME + " not being able to play competitive games!$");
     private static final Pattern DISBANDED_BY = Pattern.compile("^" + NAME + " has disbanded the party!$");
@@ -47,6 +48,8 @@ public final class ChatEvents {
         if ((m = LEAVE.matcher(text)).matches()) return new Event(Type.LEAVE, m.group(1));
         if ((m = REMOVED.matcher(text)).matches()) return new Event(Type.REMOVED, m.group(1));
         if ((m = MEMBER_LIST.matcher(text)).matches()) return new Event(Type.MEMBER_LIST, m.group(1));
+        if ((m = MEMBER_COUNT.matcher(text)).matches()) return new Event(Type.MEMBER_COUNT, m.group(1));
+        if (text.equals("That player is not in your party!")) return new Event(Type.NOT_IN_PARTY, "");
         if (DISBANDED_BY.matcher(text).matches() || KICKED_BY.matcher(text).matches()
                 || text.startsWith("The party was disbanded")
                 || text.equals("You left the party.")
