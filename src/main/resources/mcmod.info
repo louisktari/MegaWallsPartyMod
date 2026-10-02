@@ -1,1 +1,13 @@
-[{"modid":"partymod","name":"PartyMod","description":"A local party organiser with OneConfig, review tools and event controls.","version":"${version}","mcversion":"1.8.9","authorList":["Alexdoru","z"],"clientSideOnly":true}]
+[
+  {
+    "modid": "partymod",
+    "name": "Mega Walls Party Mod",
+    "description": "Stat-checks players who join your Hypixel party, flags suspicious accounts, and blocks + kicks them on demand.",
+    "version": "${version}",
+    "mcversion": "1.8.9",
+    "authorList": ["Alexdoru", "louisktari"],
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]

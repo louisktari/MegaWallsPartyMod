@@ -17,6 +17,5 @@ OneConfig loader stage-0 classes; OneConfig's implementation is loaded separatel
 Consult the upstream licence and additional terms for redistribution. Copies of
 the upstream licence texts (legacy OneConfig and main loader branches) are supplied in `licenses/`. These notices do not
 relicense third-party dependencies. Forge/MCP, Gradle and JUnit are used by the
-build/test toolchain; the wrapper JAR and scripts originate from the supplied
-project. Minecraft, Forge runtime libraries and the full OneConfig runtime used
-by the isolated client test are not included in the source archive or mod JAR.
+build/test toolchain. Minecraft, Forge runtime libraries and the full OneConfig
+runtime are not included in the source archive or mod JAR.

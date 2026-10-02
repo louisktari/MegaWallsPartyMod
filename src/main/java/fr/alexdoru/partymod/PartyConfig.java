@@ -1,67 +1,157 @@
 package fr.alexdoru.partymod;
 
 import cc.polyfrost.oneconfig.config.Config;
-import cc.polyfrost.oneconfig.config.annotations.*;
+import cc.polyfrost.oneconfig.config.annotations.Button;
+import cc.polyfrost.oneconfig.config.annotations.HUD;
+import cc.polyfrost.oneconfig.config.annotations.Info;
+import cc.polyfrost.oneconfig.config.annotations.KeyBind;
+import cc.polyfrost.oneconfig.config.annotations.Slider;
+import cc.polyfrost.oneconfig.config.annotations.Switch;
+import cc.polyfrost.oneconfig.config.annotations.Text;
 import cc.polyfrost.oneconfig.config.core.OneKeyBind;
-import cc.polyfrost.oneconfig.config.data.*;
-import fr.alexdoru.partymod.core.ReviewRules;
-import fr.alexdoru.partymod.ui.PartyHud;
+import cc.polyfrost.oneconfig.config.data.InfoType;
+import cc.polyfrost.oneconfig.config.data.Mod;
+import cc.polyfrost.oneconfig.config.data.ModType;
+import fr.alexdoru.partymod.core.Flagger;
+import fr.alexdoru.partymod.ui.Overlays;
 import org.lwjgl.input.Keyboard;
 
 public final class PartyConfig extends Config {
-    @Info(type=InfoType.INFO,size=2,text="Your party, clearly organised. Open the roster to review members and prepare an event.",category="Party",subcategory="Overview") public boolean overview;
-    @Button(name="Party organiser",text="Open roster",category="Party",subcategory="Overview") public Runnable open=PartyMod::openRoster;
-    @KeyBind(name="Open organiser",category="Party",subcategory="Shortcuts") public OneKeyBind openKey=new OneKeyBind(Keyboard.KEY_P);
-    @KeyBind(name="Toggle organiser",category="Party",subcategory="Shortcuts") public OneKeyBind toggleKey=new OneKeyBind(Keyboard.KEY_NONE);
-    @Slider(name="Target party size",min=2,max=100,step=1,category="Party",subcategory="Event") public float capacity=100;
-    @Slider(name="Roster freshness (seconds)",min=15,max=300,step=15,category="Party",subcategory="Event") public float freshness=120;
-    @Slider(name="Disconnect grace (seconds)",min=10,max=300,step=10,category="Party",subcategory="Event") public float grace=90;
-    @Switch(name="Low-experience reviews",category="Reviews",subcategory="Account history") public boolean lowExperience=true;
-    @Slider(name="Minimum recorded games",min=0,max=500,step=5,category="Reviews",subcategory="Account history") public float minGames=150;
-    @Slider(name="Minimum network level",min=1,max=250,step=1,category="Reviews",subcategory="Account history") public float minLevel=80;
-    @Switch(name="Recent-account reviews",category="Reviews",subcategory="Account history") public boolean recentAccount=true;
-    @Slider(name="Recent account (days)",min=1,max=365,step=1,category="Reviews",subcategory="Account history") public float accountDays=90;
-    @Info(type=InfoType.INFO,size=2,text="Statistics suggest review. They do not establish cheating or competitive-ban status.",category="Reviews",subcategory="Statistics") public boolean heuristicInfo;
-    @Switch(name="Ratio reviews",category="Reviews",subcategory="Statistics") public boolean ratios=true;
-    @Slider(name="FKD at 25 games or fewer",min=1,max=30,step=0,category="Reviews",subcategory="Statistics") public float fkd25=3.5f;
-    @Slider(name="FKD at 250 games or fewer",min=1,max=30,step=0,category="Reviews",subcategory="Statistics") public float fkd250=5;
-    @Slider(name="FKD at 500 games or fewer",min=1,max=30,step=0,category="Reviews",subcategory="Statistics") public float fkd500=8;
-    @Slider(name="FKD multiplied by W/L",min=1,max=50,step=0,category="Reviews",subcategory="Statistics") public float product=4.95f;
-    @Switch(name="Upgraded-class reviews",description="Original experience/quest gates retained. Zero-game advanced kits and fully upgraded classes are reviewed; free starters excluded.",category="Reviews",subcategory="Progression") public boolean kits=true;
-    @Slider(name="Upgraded-class game cutoff",min=1,max=100,step=1,category="Reviews",subcategory="Progression") public float kitGames=15;
-    @Switch(name="Legendary achievement reviews",category="Reviews",subcategory="Progression") public boolean skins=true;
-    @Switch(name="Local activity-gap reviews",description="Only locally witnessed MW sightings. Outside matches and ban status remain unknown.",category="Reviews",subcategory="Activity evidence") public boolean activity=true;
-    @Dropdown(name="Gap threshold type",options={"Calendar months","Days"},category="Reviews",subcategory="Activity evidence") public int gapType=0;
-    @Slider(name="Activity gap (months)",min=1,max=12,step=1,category="Reviews",subcategory="Activity evidence") public float gapMonths=3;
-    @Slider(name="Activity gap (days)",min=1,max=365,step=1,category="Reviews",subcategory="Activity evidence") public float gapDays=90;
-    @Button(name="Apply review rules",text="Reassess roster",description="Preview the changed reasons in the review queue. Sends no moderation commands.",category="Reviews",subcategory="Apply") public Runnable reassess=()->PartyMod.runtime.reassess();
-    @Info(type=InfoType.INFO,size=2,text="A confirmed party kick queues /block add. Voluntary departures never block a player.",category="Actions",subcategory="Kick behaviour") public boolean kickInfo;
-    @Switch(name="Block after confirmed kicks",category="Actions",subcategory="Kick behaviour") public boolean autoBlock=true;
-    @Switch(name="Confirm manual moderation",category="Actions",subcategory="Moderation") public boolean confirmActions=true;
-    @Slider(name="Command spacing (milliseconds)",min=750,max=3000,step=50,category="Actions",subcategory="Moderation") public float commandSpacing=1250;
-    @Switch(name="Show notifications",category="Notifications",subcategory="Presentation") public boolean notifications=true;
-    @Switch(name="Quiet during Mega Walls matches",category="Notifications",subcategory="Presentation") public boolean quietMatch=true;
-    @HUD(name="Party overview",category="HUD",subcategory="Overview") public PartyHud hud=new PartyHud();
-    @Info(type=InfoType.INFO,size=2,text="Move, scale and style the HUD using OneConfig's HUD editor. Individual fields are in the HUD settings.",category="HUD",subcategory="Overview") public boolean hudInfo;
-    @Button(name="HUD editor",text="Edit HUD",category="HUD",subcategory="Overview") public Runnable editHud=this::openHudEditor;
-    @Dropdown(name="Stats source",options={"Direct Hypixel API","Application service"},category="Data",subcategory="Stats setup") public int statsSource=0;
-    @Text(name="Hypixel API key",secure=true,description="Direct mode only. Saved locally in your OneConfig profile; masking does not encrypt the file.",category="Data",subcategory="Stats setup") public String hypixelApiKey="";
-    @Button(name="Apply stats setup",text="Check roster stats",category="Data",subcategory="Stats setup") public Runnable applyStats=()->PartyMod.runtime.assessAll();
-    @Switch(name="Automatically kick new Hypixel accounts",description="New joins only, after a valid firstLogin check. Requires a fresh roster and removal authority.",category="Actions",subcategory="New-account screening") public boolean autoKickNewAccounts=true;
-    @Slider(name="Minimum Hypixel account age (days)",min=1,max=365,step=1,category="Actions",subcategory="New-account screening") public float minimumAccountDays=90;
-    @Info(type=InfoType.INFO,size=2,text="Application service is optional. Its access token is separate from a Hypixel API key.",category="Data",subcategory="Application service") public boolean dataInfo;
-    @Text(name="Service URL",description="HTTPS endpoint, or localhost for your own development service.",category="Data",subcategory="Application service") public String serviceUrl="";
-    @Text(name="Service access token",secure=true,description="An application token, never a Hypixel key. Stored locally in your OneConfig profile.",category="Data",subcategory="Application service") public String serviceToken="";
-    @Slider(name="Client requests per minute",min=1,max=60,step=1,category="Data",subcategory="Request handling") public float requestBudget=30;
-    @Slider(name="Cached results (minutes)",min=15,max=1440,step=15,category="Data",subcategory="Request handling") public float cacheMinutes=120;
-    @Button(name="Retry unavailable members",text="Retry assessments",category="Data",subcategory="Request handling") public Runnable retry=()->PartyMod.runtime.assessAll();
-    @Info(type=InfoType.INFO,size=2,text="Current membership is never restored from disk. Notes, host blocklist and attendance stay on this computer.",category="Data",subcategory="Local records") public boolean localInfo;
-    @Button(name="Save local records",text="Save now",category="Data",subcategory="Local records") public Runnable saveLocal=()->PartyMod.runtime.store.flush(true);
-    public PartyConfig(){super(new Mod("PartyMod",ModType.UTIL_QOL,"/assets/partymod/icon.svg"),"partymod.json",true);initialize();registerKeyBind(openKey,PartyMod::openRoster);registerKeyBind(toggleKey,()->{enabled=!enabled;save();PartyMod.runtime.applyEnabled();});addListener("enabled",()->PartyMod.runtime.applyEnabled());hideIf("gapMonths",()->gapType!=0);hideIf("gapDays",()->gapType!=1);hideIf("minGames",()->!lowExperience);hideIf("minLevel",()->!lowExperience);hideIf("accountDays",()->!recentAccount);hideIf("hypixelApiKey",()->statsSource!=0);hideIf("serviceUrl",()->statsSource!=1);hideIf("serviceToken",()->statsSource!=1);hideIf("minimumAccountDays",()->!autoKickNewAccounts);}
-    // V0 exposes the editor through its own sidebar, but omits it from the API JAR.
-    // Keep this compatibility bridge isolated and fall back safely on other versions.
-    private void openHudEditor(){try{Object editor=Class.forName("cc.polyfrost.oneconfig.internal.gui.HudGui").getDeclaredConstructor().newInstance();cc.polyfrost.oneconfig.utils.gui.GuiUtils.displayScreen(editor);}catch(ReflectiveOperationException|LinkageError ex){openGui();PartyRuntime.chat("Use OneConfig's Edit HUD sidebar button on this OneConfig version.");}}
-    public ReviewRules.Options rules(){ReviewRules.Options o=new ReviewRules.Options();o.lowExperience=lowExperience;o.recentAccount=recentAccount;o.ratios=ratios;o.kits=kits;o.skins=skins;o.activity=activity;o.minGames=(int)minGames;o.minLevel=minLevel;o.accountDays=(int)accountDays;o.fkd25=fkd25;o.fkd250=fkd250;o.fkd500=fkd500;o.product=product;o.kitGames=(int)kitGames;o.calendarMonths=gapType==0;o.activityMonths=(int)gapMonths;o.activityDays=(int)gapDays;return o;}
+
+    // --- Flags ---
+    @Info(type = InfoType.INFO, size = 2, category = "Flags", subcategory = "About",
+            text = "Every player who joins your party is stat-checked. Matching any enabled rule puts them in the review overlay.")
+    public boolean flagsInfo;
+
+    @Switch(name = "Never joined Hypixel", category = "Flags", subcategory = "Account")
+    public boolean flagNoProfile = true;
+
+    @Switch(name = "New Hypixel account", category = "Flags", subcategory = "Account")
+    public boolean flagNewAccount = true;
+
+    @Slider(name = "New account if younger than (days)", min = 1, max = 365, step = 1, category = "Flags", subcategory = "Account")
+    public float newAccountDays = 30;
+
+    @Switch(name = "No rank", category = "Flags", subcategory = "Account")
+    public boolean flagNoRank = true;
+
+    @Switch(name = "Low network level", category = "Flags", subcategory = "Account")
+    public boolean flagLowLevel = true;
+
+    @Slider(name = "Minimum network level", min = 1, max = 100, step = 1, category = "Flags", subcategory = "Account")
+    public float minNetworkLevel = 10;
+
+    @Switch(name = "Few Mega Walls games", category = "Flags", subcategory = "Mega Walls")
+    public boolean flagFewGames = true;
+
+    @Slider(name = "Minimum games (wins + losses)", min = 1, max = 1000, step = 5, category = "Flags", subcategory = "Mega Walls")
+    public float minGames = 50;
+
+    @Switch(name = "Low Mega Walls stats", category = "Flags", subcategory = "Mega Walls")
+    public boolean flagLowStats = true;
+
+    @Slider(name = "Low if FKDR below", min = 0.1f, max = 3, step = 0, category = "Flags", subcategory = "Mega Walls")
+    public float lowFkd = 0.5f;
+
+    @Switch(name = "High Mega Walls stats", category = "Flags", subcategory = "Mega Walls")
+    public boolean flagHighStats = true;
+
+    @Slider(name = "High if FKDR above", min = 1, max = 30, step = 0, category = "Flags", subcategory = "Mega Walls")
+    public float highFkd = 5;
+
+    @Slider(name = "High if WLR above", min = 0.5f, max = 20, step = 0, category = "Flags", subcategory = "Mega Walls")
+    public float highWl = 2.5f;
+
+    // --- Actions ---
+    @Info(type = InfoType.INFO, size = 2, category = "Actions", subcategory = "About",
+            text = "Removing a player always sends /block add <name>, then /p kick <name>, one after the other.")
+    public boolean actionsInfo;
+
+    @Switch(name = "Instantly remove competitive-banned players",
+            description = "When queueing fails because a party member cannot play competitive games, block + kick them.",
+            category = "Actions", subcategory = "Automatic")
+    public boolean autoCompetitive = true;
+
+    @Switch(name = "Automatically remove flagged players",
+            description = "Block + kick anyone who joins and matches a flag rule, without asking.",
+            category = "Actions", subcategory = "Automatic")
+    public boolean autoRemoveFlagged = false;
+
+    @Switch(name = "Clickable prompt in chat for flagged players", category = "Actions", subcategory = "Prompts")
+    public boolean chatPrompt = true;
+
+    @Switch(name = "Sound when a player is flagged", category = "Actions", subcategory = "Prompts")
+    public boolean flagSound = true;
+
+    @KeyBind(name = "Remove next player to review", category = "Actions", subcategory = "Keybinds")
+    public OneKeyBind removeNextKey = new OneKeyBind(Keyboard.KEY_NONE);
+
+    @KeyBind(name = "Dismiss next player to review", category = "Actions", subcategory = "Keybinds")
+    public OneKeyBind dismissNextKey = new OneKeyBind(Keyboard.KEY_NONE);
+
+    @Slider(name = "Gap between commands (ms)", min = 300, max = 3000, step = 50, category = "Actions", subcategory = "Commands")
+    public float commandSpacing = 750;
+
+    // --- Overlays ---
+    @Info(type = InfoType.INFO, size = 2, category = "Overlays", subcategory = "About",
+            text = "Each overlay is its own on-screen panel. Use OneConfig's Edit HUD to move and resize them.")
+    public boolean overlaysInfo;
+
+    @HUD(name = "Party log", category = "Overlays", subcategory = "Party log")
+    public Overlays.LogHud logHud = new Overlays.LogHud();
+
+    @HUD(name = "Party members", category = "Overlays", subcategory = "Party members")
+    public Overlays.MembersHud membersHud = new Overlays.MembersHud();
+
+    @HUD(name = "To review", category = "Overlays", subcategory = "To review")
+    public Overlays.ReviewHud reviewHud = new Overlays.ReviewHud();
+
+    @HUD(name = "Blocked players", category = "Overlays", subcategory = "Blocked players")
+    public Overlays.BlockedHud blockedHud = new Overlays.BlockedHud();
+
+    // --- Hypixel API ---
+    @Text(name = "Hypixel API key", secure = true, placeholder = "Paste your key from developer.hypixel.net",
+            description = "Stored locally in your OneConfig profile. Only sent to api.hypixel.net.",
+            category = "Hypixel API", subcategory = "Key")
+    public String hypixelApiKey = "";
+
+    @Slider(name = "Lookups per minute", min = 5, max = 120, step = 5, category = "Hypixel API", subcategory = "Limits")
+    public float requestsPerMinute = 60;
+
+    @Slider(name = "Cache results (minutes)", min = 1, max = 240, step = 1, category = "Hypixel API", subcategory = "Limits")
+    public float cacheMinutes = 30;
+
+    @Button(name = "Re-check current party", text = "Re-check", category = "Hypixel API", subcategory = "Key")
+    public Runnable recheck = () -> PartyMod.runtime.recheckAll();
+
+    public PartyConfig() {
+        super(new Mod(PartyMod.NAME, ModType.HYPIXEL, "/assets/partymod/icon.svg"), "megawallspartymod.json");
+        initialize();
+        registerKeyBind(removeNextKey, () -> PartyMod.runtime.removeNext());
+        registerKeyBind(dismissNextKey, () -> PartyMod.runtime.dismissNext());
+        hideIf("newAccountDays", () -> !flagNewAccount);
+        hideIf("minNetworkLevel", () -> !flagLowLevel);
+        hideIf("minGames", () -> !flagFewGames);
+        hideIf("lowFkd", () -> !flagLowStats);
+        hideIf("highFkd", () -> !flagHighStats);
+        hideIf("highWl", () -> !flagHighStats);
+    }
+
+    public Flagger.Options flagOptions() {
+        Flagger.Options o = new Flagger.Options();
+        o.noProfile = flagNoProfile;
+        o.newAccount = flagNewAccount;
+        o.newAccountDays = (int) newAccountDays;
+        o.noRank = flagNoRank;
+        o.lowLevel = flagLowLevel;
+        o.minNetworkLevel = minNetworkLevel;
+        o.fewGames = flagFewGames;
+        o.minGames = (int) minGames;
+        o.lowStats = flagLowStats;
+        o.lowFkd = lowFkd;
+        o.highStats = flagHighStats;
+        o.highFkd = highFkd;
+        o.highWl = highWl;
+        return o;
+    }
 }
-
-

@@ -1,37 +1,120 @@
 package fr.alexdoru.partymod.core;
 
-import com.google.gson.*;
-import java.util.*;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
-/** Optional values stay null; absent data is never fabricated as measured zero. */
+/**
+ * The subset of a Hypixel player profile the flag rules need. Missing values stay
+ * null so absent data is never reported as a measured zero.
+ */
 public final class PlayerStats {
-    public String uuid="", name="", source="Application service";
-    public Long firstLogin, fetchedAt;
+    public String uuid = "";
+    public String name = "";
+    /** False when Hypixel has no profile for this UUID (never joined the network). */
+    public boolean hasProfile;
+    public Long firstLogin;
     public Double networkLevel;
-    public Integer wins, losses, finals, finalDeaths, quests, legendary;
-    public final Map<String,Kit> kits=new LinkedHashMap<>();
-    public final List<String> warnings=new ArrayList<>();
-    public static final String[] CLASSES={"Arcanist","Assassin","Automaton","Blaze","Cow","Creeper","Dreadlord","Enderman","Golem","Herobrine","Hunter","Moleman","Phoenix","Pigman","Pirate","Renegade","Shaman","Shark","Skeleton","Snowman","Spider","Squid","Werewolf","Zombie","Angel","Dragon","Sheep"};
-    public static final class Kit { public Boolean unlocked; public Integer kit,ability,passive1,passive2,gathering; public boolean complete(){return kit!=null&&ability!=null&&passive1!=null&&passive2!=null&&gathering!=null;} public boolean maxed(){return Boolean.TRUE.equals(unlocked)&&complete()&&kit>=5&&ability>=5&&passive1>=3&&passive2>=3&&gathering>=3;} }
-    public Integer games() { return wins==null||losses==null?null:wins+losses; }
-    public Double fkd() { return finals==null||finalDeaths==null?null:finalDeaths==0?null:(double)finals/finalDeaths; }
-    public Double wl() { return wins==null||losses==null?null:losses==0?null:(double)wins/losses; }
-    public static PlayerStats parseSummary(JsonObject root) {
-        PlayerStats s=new PlayerStats(); s.uuid=string(root,"uuid",""); s.name=string(root,"name","");
-        s.source=string(root,"source","Application service"); s.firstLogin=whole(root,"firstLogin",0,Long.MAX_VALUE);
-        s.fetchedAt=whole(root,"fetchedAt",0,Long.MAX_VALUE); s.networkLevel=number(root,"networkLevel",1,100000);
-        JsonObject mw=object(root,"megaWalls");
-        if(mw!=null) {s.wins=integer(mw,"wins");s.losses=integer(mw,"losses");s.finals=integer(mw,"finalKills");s.finalDeaths=integer(mw,"finalDeaths");s.legendary=integer(mw,"legendarySkins");}
-        s.quests=integer(root,"completedQuests"); JsonObject classes=mw==null?null:object(mw,"classes");
-        if(classes!=null) for(String name:CLASSES) {JsonObject c=object(classes,name.toLowerCase(Locale.ROOT)); if(c==null) continue;Kit k=new Kit();k.unlocked=bool(c,"unlocked");k.kit=integer(c,"kit");k.ability=integer(c,"ability");k.passive1=integer(c,"passive1");k.passive2=integer(c,"passive2");k.gathering=integer(c,"gathering");s.kits.put(name,k);}
-        if(s.games()==null) s.warnings.add("Recorded win/loss sample unavailable");
-        if(s.firstLogin==null) s.warnings.add("First-login date unavailable");
+    /** Display rank, e.g. "MVP+", or null for a player with no rank. */
+    public String rank;
+    public Integer wins, losses, finalKills, finalDeaths;
+    public long fetchedAt;
+
+    public Integer games() {
+        return wins == null || losses == null ? null : wins + losses;
+    }
+
+    /** Final kill/death ratio; finals alone when there are no final deaths. */
+    public Double fkd() {
+        if (finalKills == null || finalDeaths == null) return null;
+        return finalDeaths == 0 ? (double) finalKills : (double) finalKills / finalDeaths;
+    }
+
+    /** Win/loss ratio; wins alone when there are no losses. */
+    public Double wl() {
+        if (wins == null || losses == null) return null;
+        return losses == 0 ? (double) wins : (double) wins / losses;
+    }
+
+    /**
+     * Builds stats from a Hypixel {@code /v2/player} response.
+     *
+     * @param response full JSON response ({"success":true,"player":{...}})
+     */
+    public static PlayerStats fromHypixel(String uuid, String name, JsonObject response, long now) {
+        PlayerStats s = new PlayerStats();
+        s.uuid = uuid;
+        s.name = name;
+        s.fetchedAt = now;
+        JsonObject player = object(response, "player");
+        if (player == null) return s; // never joined Hypixel
+        s.hasProfile = true;
+        Double first = number(player, "firstLogin");
+        if (first != null && first > 0) s.firstLogin = first.longValue();
+        Double xp = number(player, "networkExp");
+        if (xp != null && xp >= 0) s.networkLevel = networkLevel(xp);
+        s.rank = rank(player);
+        JsonObject mw = object(object(player, "stats"), "Walls3");
+        if (mw != null) {
+            s.wins = integer(mw, "wins");
+            s.losses = integer(mw, "losses");
+            s.finalKills = firstInteger(mw, "final_kills", "finalKills");
+            s.finalDeaths = firstInteger(mw, "final_deaths", "finalDeaths");
+        }
+        // Players who have never played Mega Walls genuinely have zero games.
+        if (s.wins == null) s.wins = 0;
+        if (s.losses == null) s.losses = 0;
+        if (s.finalKills == null) s.finalKills = 0;
+        if (s.finalDeaths == null) s.finalDeaths = 0;
         return s;
     }
-    public static JsonObject object(JsonObject o,String key) {JsonElement e=o==null?null:o.get(key);return e!=null&&e.isJsonObject()?e.getAsJsonObject():null;}
-    public static String string(JsonObject o,String key,String fallback) {JsonElement e=o==null?null:o.get(key);return e!=null&&e.isJsonPrimitive()&&e.getAsJsonPrimitive().isString()?e.getAsString():fallback;}
-    public static Double number(JsonObject o,String key,double min,double max) {JsonElement e=o==null?null:o.get(key);if(e==null||!e.isJsonPrimitive()||!e.getAsJsonPrimitive().isNumber()) return null;try{double d=e.getAsDouble();return Double.isFinite(d)&&d>=min&&d<=max?d:null;}catch(RuntimeException ex){return null;}}
-    public static Long whole(JsonObject o,String key,long min,long max) {Double n=number(o,key,min,max);return n!=null&&n==Math.floor(n)?n.longValue():null;}
-    public static Integer integer(JsonObject o,String key) {Long n=whole(o,key,0,Integer.MAX_VALUE/4);return n==null?null:n.intValue();}
-    public static Boolean bool(JsonObject o,String key) {JsonElement e=o==null?null:o.get(key);return e!=null&&e.isJsonPrimitive()&&e.getAsJsonPrimitive().isBoolean()?e.getAsBoolean():null;}
+
+    /** Standard Hypixel network level formula. */
+    static double networkLevel(double xp) {
+        return 1 + (-8750.0 + Math.sqrt(8750.0 * 8750.0 + 5000.0 * xp)) / 2500.0;
+    }
+
+    /** Resolves the player's visible rank, or null when they have none. */
+    static String rank(JsonObject player) {
+        String special = string(player, "rank");
+        if (special != null && !special.equals("NORMAL") && !special.equals("NONE")) {
+            return special.equals("YOUTUBER") ? "YOUTUBE" : special;
+        }
+        if ("SUPERSTAR".equals(string(player, "monthlyPackageRank"))) return "MVP++";
+        String pkg = string(player, "newPackageRank");
+        if (pkg == null || pkg.equals("NONE")) pkg = string(player, "packageRank");
+        if (pkg == null || pkg.equals("NONE")) return null;
+        return pkg.replace("_PLUS", "+");
+    }
+
+    // --- small, defensive JSON helpers (Gson 2.2.4 compatible) ---
+
+    public static JsonObject object(JsonObject o, String key) {
+        JsonElement e = o == null ? null : o.get(key);
+        return e != null && e.isJsonObject() ? e.getAsJsonObject() : null;
+    }
+
+    public static String string(JsonObject o, String key) {
+        JsonElement e = o == null ? null : o.get(key);
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString() ? e.getAsString() : null;
+    }
+
+    public static Double number(JsonObject o, String key) {
+        JsonElement e = o == null ? null : o.get(key);
+        if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) return null;
+        double d = e.getAsDouble();
+        return Double.isNaN(d) || Double.isInfinite(d) ? null : d;
+    }
+
+    static Integer integer(JsonObject o, String key) {
+        Double d = number(o, key);
+        return d == null || d < 0 || d > Integer.MAX_VALUE ? null : d.intValue();
+    }
+
+    private static Integer firstInteger(JsonObject o, String... keys) {
+        for (String key : keys) {
+            Integer value = integer(o, key);
+            if (value != null) return value;
+        }
+        return null;
+    }
 }
