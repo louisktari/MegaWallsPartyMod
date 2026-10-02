@@ -522,6 +522,8 @@ public final class Panels {
         PartyRuntime rt = PartyMod.runtime;
         Model m = new Model(Id.BLOCKED, "Blocked players" + (rt.history.size() == 0 ? "" : " (" + rt.history.size() + ")"));
         m.empty = "Nobody blocked yet";
+        m.toolbar.add(new Button("Copy lists", ACCENT, rt::exportToClipboard));
+        m.toolbar.add(new Button("Paste lists", ACCENT, rt::importFromClipboard));
         m.toolbar.add(new Button("Forget all", MUTED, rt::clearHistory, "forget-all"));
         long now = System.currentTimeMillis();
         for (BlockHistory.Entry b : rt.history.recent(100)) {

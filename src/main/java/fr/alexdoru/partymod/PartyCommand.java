@@ -12,7 +12,7 @@ import java.util.Locale;
 
 /** /mwp - the only command. Everything else lives in OneConfig and the overlays. */
 public final class PartyCommand extends CommandBase {
-    private static final String[] SUBCOMMANDS = {"help", "settings", "panels", "remove", "dismiss", "trust", "untrust", "unblock", "check", "sync", "clear", "setkey", "testkey"};
+    private static final String[] SUBCOMMANDS = {"help", "settings", "panels", "remove", "dismiss", "trust", "untrust", "unblock", "check", "sync", "clear", "export", "import", "setkey", "testkey"};
 
     @Override
     public String getCommandName() {
@@ -48,6 +48,15 @@ public final class PartyCommand extends CommandBase {
                 break;
             case "testkey":
                 runtime.testKey();
+                break;
+            case "export":
+                if (name.equalsIgnoreCase("file")) runtime.exportToFile();
+                else runtime.exportToClipboard();
+                break;
+            case "import":
+                if (name.isEmpty() || name.equalsIgnoreCase("clipboard")) runtime.importFromClipboard();
+                else if (name.equalsIgnoreCase("file")) runtime.importFromFile("");
+                else runtime.importFromFile(String.join(" ", Arrays.copyOfRange(args, 1, args.length)));
                 break;
             case "queue": // used by the queue-guard chat buttons
                 String mode = args.length > 2 ? String.join(" ", Arrays.copyOfRange(args, 2, args.length)) : "";
@@ -114,6 +123,8 @@ public final class PartyCommand extends CommandBase {
         PartyRuntime.chat("/mwp check <name> - re-run the stat check");
         PartyRuntime.chat("/mwp sync - send /p list and check everyone");
         PartyRuntime.chat("/mwp clear - clear the party log");
+        PartyRuntime.chat("/mwp export [file] - copy (or save) your trusted + blocked lists");
+        PartyRuntime.chat("/mwp import [file|<name>.json] - merge a co-host's lists (default: clipboard)");
         PartyRuntime.chat("/mwp setkey <key> - set your Hypixel API key");
         PartyRuntime.chat("/mwp settings - open OneConfig");
     }

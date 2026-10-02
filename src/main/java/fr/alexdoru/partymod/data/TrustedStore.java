@@ -35,10 +35,20 @@ public final class TrustedStore {
     }
 
     public synchronized boolean add(String name) {
-        if (!ChatEvents.validName(name) || isTrusted(name)) return false;
-        names.put(name.toLowerCase(Locale.ROOT), name);
+        if (!addQuietly(name)) return false;
         save();
         return true;
+    }
+
+    /** Adds without writing the file; call {@link #flush()} after a batch. */
+    synchronized boolean addQuietly(String name) {
+        if (!ChatEvents.validName(name) || isTrusted(name)) return false;
+        names.put(name.toLowerCase(Locale.ROOT), name);
+        return true;
+    }
+
+    public synchronized void flush() {
+        save();
     }
 
     public synchronized boolean remove(String name) {

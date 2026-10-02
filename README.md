@@ -31,6 +31,10 @@ and can be removed with one click or one key. Removing a player sends `/block ad
   "Removed before (2 Oct)" as a strong flag.
 - **Trusted players.** Regulars you trust are never flagged. Manage the list with the Trust buttons
   or in OneConfig.
+- **Share lists with co-hosts.** Export your trusted and blocked lists to the clipboard (paste into
+  Discord) or to a file, and import a co-host's. Importing only ever *adds*: your existing entries are
+  kept, and anyone you trust is never pulled into your blocked list. Imported blocked players are
+  flagged "Removed before" if they join. The import doesn't `/block` them on Hypixel.
 
 ## Hosting without commands
 
@@ -41,7 +45,7 @@ Four panels sit on your screen like extra chat windows:
 | **To review** | A stat card per flagged player, strong flags first, with reasons in red or gold. The title flashes while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice) |
 | **Party** | A stat card for every member, newest first, with a verdict badge. New joins are tagged **NEW** for a minute. Shows a warning if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Check** |
 | **Party log** | Joins, leaves, flags and actions with timestamps | **Undo** on removals (10 s), **Clear** |
-| **Blocked players** | Everyone you've removed (saved across sessions), why, when, and by whom | hover for **Unblock**; **Forget all** |
+| **Blocked players** | Everyone you've removed (saved across sessions), why, when, and by whom | hover for **Unblock**; **Copy lists**, **Paste lists**, **Forget all** |
 
 Each stat card reads like Hypixel. The name is coloured by rank, and the stats use traffic-light colours based on your flag thresholds: **green** is fine, **yellow** is borderline, **red** matches a flag.
 
@@ -78,7 +82,7 @@ While you play the panels only display, and during a Mega Walls match they shrin
 | Flags | Each rule's on/off switch next to its threshold; defaults are shown in the hover description |
 | Actions | Competitive auto-removal (on), auto-remove strong flags (off), queue guard (on), chat prompt, sound, keybinds, command gap |
 | Overlays | Panels on/off, quiet during matches, scale, width, entries per panel, opacity, reset positions |
-| Trusted players | Editable list, one name per line |
+| Trusted players | Editable list, one name per line; **Copy / Paste** and **Export / Import** lists to share with co-hosts |
 | Advanced | Lookups per minute, cache, re-check party, clear saved blocked history |
 
 Panels are positioned by dragging them in-game, **not** with OneConfig's Edit HUD.
@@ -97,6 +101,8 @@ You shouldn't need these, because every action has a button. They're there for k
 | `/mwp check <name>` | re-run a player's stat check |
 | `/mwp sync` | send `/p list` and check every member |
 | `/mwp clear` | clear the party log |
+| `/mwp export` / `export file` | copy your trusted + blocked lists to the clipboard / save `export-<date>.json` |
+| `/mwp import` / `import file` / `import <name>.json` | merge from the clipboard / the newest export file / a named file in `config/megawallspartymod/` |
 | `/mwp setkey <key>` / `testkey` | save / test your Hypixel API key |
 | `/mwp settings` | open OneConfig |
 

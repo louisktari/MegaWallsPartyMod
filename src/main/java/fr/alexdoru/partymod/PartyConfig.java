@@ -207,6 +207,26 @@ public final class PartyConfig extends Config {
             category = "Trusted players", subcategory = "List")
     public String trustedText = "";
 
+    @Info(type = InfoType.INFO, size = 2, category = "Trusted players", subcategory = "Share with co-hosts",
+            text = "Export your trusted and blocked lists, and import a co-host's. Importing only adds - nothing you have is removed.")
+    public boolean shareInfo;
+
+    @Button(name = "Copy lists to clipboard", text = "Copy", category = "Trusted players", subcategory = "Share with co-hosts",
+            description = "Paste it into Discord or a DM for a co-host.")
+    public Runnable exportClipboard = () -> PartyMod.runtime.exportToClipboard();
+
+    @Button(name = "Import lists from clipboard", text = "Paste", category = "Trusted players", subcategory = "Share with co-hosts",
+            description = "Copy a co-host's export first, then press Paste.")
+    public Runnable importClipboard = () -> PartyMod.runtime.importFromClipboard();
+
+    @Button(name = "Export lists to a file", text = "Export", category = "Trusted players", subcategory = "Share with co-hosts",
+            description = "Saves export-<date>.json in config/megawallspartymod/.")
+    public Runnable exportFile = () -> PartyMod.runtime.exportToFile();
+
+    @Button(name = "Import the newest export file", text = "Import", category = "Trusted players", subcategory = "Share with co-hosts",
+            description = "Reads the newest export-*.json in config/megawallspartymod/.")
+    public Runnable importFile = () -> PartyMod.runtime.importFromFile("");
+
     // ================================================================ Advanced
     @Slider(name = "Lookups per minute", min = 5, max = 120, step = 5, description = "Hypixel allows about 60. Default: 60",
             category = "Advanced", subcategory = "Hypixel API")

@@ -55,7 +55,20 @@ public final class BlockHistory {
     }
 
     public synchronized void record(String name, String reason, String by, long now) {
-        if (!ChatEvents.validName(name)) return;
+        if (put(name, reason, by, now)) save();
+    }
+
+    /** Adds an imported entry without touching an existing one; call {@link #flush()} after a batch. */
+    synchronized boolean importEntry(String name, String reason, String by, long at) {
+        return get(name) == null && put(name, reason, by, at);
+    }
+
+    public synchronized void flush() {
+        save();
+    }
+
+    private boolean put(String name, String reason, String by, long now) {
+        if (!ChatEvents.validName(name)) return false;
         Entry e = new Entry();
         e.name = name;
         e.reason = reason == null ? "" : reason;
@@ -65,7 +78,7 @@ public final class BlockHistory {
         entries.remove(key); // re-insert so it becomes the newest
         entries.put(key, e);
         while (entries.size() > LIMIT) entries.remove(entries.keySet().iterator().next());
-        save();
+        return true;
     }
 
     public synchronized Entry get(String name) {
@@ -78,10 +91,11 @@ public final class BlockHistory {
         return true;
     }
 
-    /** Newest first. */
+    /** Newest first (by removal time, so imported entries slot in where they belong). */
     public synchronized List<Entry> recent(int limit) {
         List<Entry> all = new ArrayList<>(entries.values());
         Collections.reverse(all);
+        all.sort((a, b) -> Long.compare(b.at, a.at));
         return all.size() > limit ? new ArrayList<>(all.subList(0, limit)) : all;
     }
 

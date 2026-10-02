@@ -10,6 +10,7 @@ import fr.alexdoru.partymod.core.PartyTracker.Status;
 import fr.alexdoru.partymod.core.StatFormat;
 import fr.alexdoru.partymod.data.BlockHistory;
 import fr.alexdoru.partymod.data.HypixelClient;
+import fr.alexdoru.partymod.data.ListShare;
 import fr.alexdoru.partymod.data.TrustedStore;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetworkPlayerInfo;
@@ -54,8 +55,98 @@ public final class PartyRuntime {
             + EnumChatFormatting.DARK_PURPLE + "] " + EnumChatFormatting.GRAY;
 
     public PartyRuntime(File dataDir) {
+        this.dataDir = dataDir;
         trusted = new TrustedStore(new File(dataDir, "trusted.json"));
         history = new BlockHistory(new File(dataDir, "blocked-history.json"));
+    }
+
+    // ---------------------------------------------------------------- sharing lists
+
+    private final File dataDir;
+
+    private String exportText() {
+        return ListShare.export(trusted, history, selfName(), System.currentTimeMillis());
+    }
+
+    /** Writes an export file into the mod folder and offers to open it. */
+    public void exportToFile() {
+        String stamp = new java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.ROOT).format(new java.util.Date());
+        File file = new File(dataDir, "export-" + stamp + ".json");
+        try {
+            java.nio.file.Files.createDirectories(dataDir.toPath());
+            java.nio.file.Files.write(file.toPath(), exportText().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException | RuntimeException e) {
+            chat(EnumChatFormatting.RED + "Could not write the export: " + e.getMessage());
+            return;
+        }
+        IChatComponent line = new ChatComponentText(PREFIX + "Exported " + trusted.all().size() + " trusted and "
+                + history.size() + " blocked players to " + EnumChatFormatting.WHITE + file.getName() + " ");
+        IChatComponent open = new ChatComponentText("[Open folder]");
+        open.setChatStyle(new ChatStyle().setColor(EnumChatFormatting.LIGHT_PURPLE).setBold(true)
+                .setChatClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE, dataDir.getAbsolutePath()))
+                .setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentText(dataDir.getAbsolutePath()))));
+        line.appendSibling(open);
+        chat(line);
+        chat("Send that file to a co-host; they drop it in " + EnumChatFormatting.WHITE + "config/megawallspartymod/"
+                + EnumChatFormatting.GRAY + " and press Import latest file.");
+    }
+
+    /** Copies the export to the clipboard, ready to paste into Discord. */
+    public void exportToClipboard() {
+        net.minecraft.client.gui.GuiScreen.setClipboardString(exportText());
+        chat("Copied " + trusted.all().size() + " trusted and " + history.size()
+                + " blocked players to your clipboard. A co-host copies it and presses Import from clipboard.");
+    }
+
+    public void importFromClipboard() {
+        report(ListShare.importInto(net.minecraft.client.gui.GuiScreen.getClipboardString(), trusted, history), "clipboard");
+    }
+
+    /**
+     * Imports a file from the mod folder.
+     *
+     * @param fileName a file name inside config/megawallspartymod, or empty for the newest export-*.json
+     */
+    public void importFromFile(String fileName) {
+        File file;
+        if (fileName == null || fileName.isEmpty()) {
+            File[] exports = dataDir.listFiles((dir, n) -> n.startsWith("export-") && n.endsWith(".json"));
+            if (exports == null || exports.length == 0) {
+                chat("No export-*.json files in config/megawallspartymod/ yet. Drop a co-host's export there first.");
+                return;
+            }
+            file = exports[0];
+            for (File f : exports) if (f.lastModified() > file.lastModified()) file = f;
+        } else if (!fileName.matches("[A-Za-z0-9._ -]{1,80}\\.json")) {
+            chat("Give a .json file name from config/megawallspartymod/.");
+            return;
+        } else {
+            file = new File(dataDir, fileName);
+        }
+        if (!file.isFile()) {
+            chat("Can't find " + file.getName() + " in config/megawallspartymod/.");
+            return;
+        }
+        try {
+            if (file.length() > 1_000_000) throw new java.io.IOException("file is too large");
+            String text = new String(java.nio.file.Files.readAllBytes(file.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+            report(ListShare.importInto(text, trusted, history), file.getName());
+        } catch (java.io.IOException e) {
+            chat(EnumChatFormatting.RED + "Could not read " + file.getName() + ": " + e.getMessage());
+        }
+    }
+
+    private void report(ListShare.Result r, String source) {
+        if (!r.ok()) {
+            chat(EnumChatFormatting.RED + r.error + ".");
+            return;
+        }
+        PartyMod.config.syncTrustedText(trusted.all());
+        reassessAll();
+        chat(EnumChatFormatting.GREEN + "Imported from " + source + ": " + r.trustedAdded + " trusted, " + r.blockedAdded
+                + " blocked" + (r.skipped > 0 ? EnumChatFormatting.GRAY + " (" + r.skipped + " invalid entries skipped)" : "")
+                + EnumChatFormatting.GREEN + ". Existing entries were kept.");
+        party.log(EnumChatFormatting.GREEN + "Imported lists: +" + r.trustedAdded + " trusted, +" + r.blockedAdded + " blocked");
     }
 
     // ---------------------------------------------------------------- lifecycle
