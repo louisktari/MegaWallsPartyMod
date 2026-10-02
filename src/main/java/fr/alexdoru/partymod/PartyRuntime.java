@@ -7,6 +7,7 @@ import fr.alexdoru.partymod.core.PartyTracker;
 import fr.alexdoru.partymod.core.PartyTracker.Member;
 import fr.alexdoru.partymod.core.PartyTracker.Status;
 import fr.alexdoru.partymod.data.HypixelClient;
+import fr.alexdoru.partymod.data.TrustedStore;
 import net.minecraft.client.Minecraft;
 import net.minecraft.event.ClickEvent;
 import net.minecraft.event.HoverEvent;
@@ -19,6 +20,8 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Reacts to party chat, runs stat checks and sends block + kick commands. Client thread only. */
@@ -26,6 +29,11 @@ public final class PartyRuntime {
     public final PartyTracker party = new PartyTracker();
     private final CommandQueue commands = new CommandQueue();
     private final HypixelClient api = new HypixelClient(PartyMod.version());
+    public final TrustedStore trusted;
+
+    public PartyRuntime(File trustedFile) {
+        trusted = new TrustedStore(trustedFile);
+    }
 
     private static final String PREFIX = EnumChatFormatting.DARK_PURPLE + "[" + EnumChatFormatting.LIGHT_PURPLE + "MWP"
             + EnumChatFormatting.DARK_PURPLE + "] " + EnumChatFormatting.GRAY;
@@ -120,7 +128,12 @@ public final class PartyRuntime {
     // ---------------------------------------------------------------- stat checks
 
     private void check(Member m) {
-        m.status = Status.CHECKING;
+        if (trusted.isTrusted(m.name)) {
+            m.status = Status.TRUSTED;
+            m.reasons.clear();
+        } else {
+            m.status = Status.CHECKING;
+        }
         api.lookup(m.name, PartyMod.config.hypixelApiKey, (int) PartyMod.config.cacheMinutes,
                 (int) PartyMod.config.requestsPerMinute,
                 result -> Minecraft.getMinecraft().addScheduledTask(() -> onResult(m, result)));
@@ -130,6 +143,10 @@ public final class PartyRuntime {
         if (party.get(m.name) != m) return; // left or party changed meanwhile
         m.stats = result.stats;
         m.reasons.clear();
+        if (trusted.isTrusted(m.name)) {
+            m.status = Status.TRUSTED;
+            return;
+        }
         if (result.stats == null) {
             m.status = Status.UNAVAILABLE;
             m.error = result.error;
@@ -160,8 +177,11 @@ public final class PartyRuntime {
         line.appendSibling(button("[Block + Kick]", EnumChatFormatting.RED, "/mwp remove " + m.name,
                 "Sends /block add " + m.name + " then /p kick " + m.name));
         line.appendSibling(new ChatComponentText(" "));
-        line.appendSibling(button("[Dismiss]", EnumChatFormatting.GREEN, "/mwp dismiss " + m.name,
-                "Keep " + m.name + " in the party"));
+        line.appendSibling(button("[Keep]", EnumChatFormatting.GREEN, "/mwp dismiss " + m.name,
+                "Keep " + m.name + " in the party this time"));
+        line.appendSibling(new ChatComponentText(" "));
+        line.appendSibling(button("[Trust]", EnumChatFormatting.AQUA, "/mwp trust " + m.name,
+                "Always keep " + m.name + " - never flag them again"));
         chat(line);
     }
 
@@ -220,6 +240,40 @@ public final class PartyRuntime {
         party.log(name + " dismissed - staying in party");
     }
 
+    public void removeAllFlagged() {
+        List<Member> queue = new ArrayList<>(party.toReview());
+        for (Member m : queue) remove(m.name, String.join(", ", m.reasons), false);
+        if (!queue.isEmpty()) party.log(EnumChatFormatting.RED + "Kicking all " + queue.size() + " flagged players");
+    }
+
+    public void trust(String name) {
+        if (!ChatEvents.validName(name)) return;
+        trusted.add(name);
+        Member m = party.get(name);
+        if (m != null && m.status != Status.REMOVED) {
+            m.status = Status.TRUSTED;
+            m.reasons.clear();
+        }
+        party.log(EnumChatFormatting.AQUA + name + EnumChatFormatting.GRAY + " trusted - never flagged again");
+    }
+
+    public void untrust(String name) {
+        if (!trusted.remove(name)) {
+            chat(name + " is not on your trusted list.");
+            return;
+        }
+        party.log(name + " removed from trusted list");
+        Member m = party.get(name);
+        if (m != null) recheck(name);
+    }
+
+    public void unblock(String name) {
+        if (!ChatEvents.validName(name)) return;
+        commands.add("/block remove " + name);
+        party.unrecordBlocked(name);
+        party.log(EnumChatFormatting.GREEN + "Unblocking " + name);
+    }
+
     public void removeNext() {
         List<Member> queue = party.toReview();
         if (queue.isEmpty()) chat("Nobody to review.");
@@ -233,7 +287,12 @@ public final class PartyRuntime {
     }
 
     public void syncParty() {
+        if (!active()) {
+            chat("Join Hypixel first.");
+            return;
+        }
         commands.add("/p list");
+        party.log("Syncing party list");
     }
 
     // ---------------------------------------------------------------- output

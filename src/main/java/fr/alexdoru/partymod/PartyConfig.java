@@ -2,7 +2,6 @@ package fr.alexdoru.partymod;
 
 import cc.polyfrost.oneconfig.config.Config;
 import cc.polyfrost.oneconfig.config.annotations.Button;
-import cc.polyfrost.oneconfig.config.annotations.HUD;
 import cc.polyfrost.oneconfig.config.annotations.Info;
 import cc.polyfrost.oneconfig.config.annotations.KeyBind;
 import cc.polyfrost.oneconfig.config.annotations.Slider;
@@ -13,7 +12,8 @@ import cc.polyfrost.oneconfig.config.data.InfoType;
 import cc.polyfrost.oneconfig.config.data.Mod;
 import cc.polyfrost.oneconfig.config.data.ModType;
 import fr.alexdoru.partymod.core.Flagger;
-import fr.alexdoru.partymod.ui.Overlays;
+import fr.alexdoru.partymod.ui.OverlayScreen;
+import net.minecraft.client.Minecraft;
 import org.lwjgl.input.Keyboard;
 
 public final class PartyConfig extends Config {
@@ -94,20 +94,58 @@ public final class PartyConfig extends Config {
 
     // --- Overlays ---
     @Info(type = InfoType.INFO, size = 2, category = "Overlays", subcategory = "About",
-            text = "Each overlay is its own on-screen panel. Use OneConfig's Edit HUD to move and resize them.")
+            text = "Open chat (or press the overlay key) to use the panels: drag a title bar to move, hover a player for stats, click buttons to act.")
     public boolean overlaysInfo;
 
-    @HUD(name = "Party log", category = "Overlays", subcategory = "Party log")
-    public Overlays.LogHud logHud = new Overlays.LogHud();
+    @KeyBind(name = "Open interactive overlay", category = "Overlays", subcategory = "About")
+    public OneKeyBind overlayKey = new OneKeyBind(Keyboard.KEY_P);
 
-    @HUD(name = "Party members", category = "Overlays", subcategory = "Party members")
-    public Overlays.MembersHud membersHud = new Overlays.MembersHud();
+    @Switch(name = "To review", category = "Overlays", subcategory = "Panels")
+    public boolean showReview = true;
 
-    @HUD(name = "To review", category = "Overlays", subcategory = "To review")
-    public Overlays.ReviewHud reviewHud = new Overlays.ReviewHud();
+    @Switch(name = "Party members", category = "Overlays", subcategory = "Panels")
+    public boolean showMembers = true;
 
-    @HUD(name = "Blocked players", category = "Overlays", subcategory = "Blocked players")
-    public Overlays.BlockedHud blockedHud = new Overlays.BlockedHud();
+    @Switch(name = "Party log", category = "Overlays", subcategory = "Panels")
+    public boolean showLog = true;
+
+    @Switch(name = "Blocked players", category = "Overlays", subcategory = "Panels")
+    public boolean showBlocked = true;
+
+    @Switch(name = "Hide empty panels while playing", category = "Overlays", subcategory = "Look")
+    public boolean hideEmpty = false;
+
+    @Slider(name = "Panel scale", min = 0.5f, max = 1.5f, step = 0, category = "Overlays", subcategory = "Look")
+    public float panelScale = 0.85f;
+
+    @Slider(name = "Panel width", min = 120, max = 320, step = 5, category = "Overlays", subcategory = "Look")
+    public float panelWidth = 200;
+
+    @Slider(name = "Max rows per panel", min = 3, max = 25, step = 1, category = "Overlays", subcategory = "Look")
+    public float maxRows = 8;
+
+    @Slider(name = "Background opacity", min = 0, max = 1, step = 0, category = "Overlays", subcategory = "Look")
+    public float backgroundOpacity = 0.55f;
+
+    @Button(name = "Panel positions", text = "Reset", category = "Overlays", subcategory = "Look")
+    public Runnable resetPositionsButton = () -> {
+        resetPositions();
+        save();
+    };
+
+    // Panel positions as fractions of the screen; changed by dragging, saved with the profile.
+    public float reviewX, reviewY, membersX, membersY, logX, logY, blockedX, blockedY;
+
+    private void resetPositions() {
+        reviewX = 0.005f;
+        reviewY = 0.08f;
+        membersX = 0.005f;
+        membersY = 0.33f;
+        logX = 0.005f;
+        logY = 0.58f;
+        blockedX = 0.78f;
+        blockedY = 0.55f;
+    }
 
     // --- Hypixel API ---
     @Text(name = "Hypixel API key", secure = true, placeholder = "Paste your key from developer.hypixel.net",
@@ -126,7 +164,12 @@ public final class PartyConfig extends Config {
 
     public PartyConfig() {
         super(new Mod(PartyMod.NAME, ModType.HYPIXEL, "/assets/partymod/icon.svg"), "megawallspartymod.json");
+        resetPositions();
         initialize();
+        registerKeyBind(overlayKey, () -> {
+            int key = overlayKey.getKeyBinds().isEmpty() ? Keyboard.KEY_NONE : overlayKey.getKeyBinds().get(0);
+            Minecraft.getMinecraft().addScheduledTask(() -> Minecraft.getMinecraft().displayGuiScreen(new OverlayScreen(key)));
+        });
         registerKeyBind(removeNextKey, () -> PartyMod.runtime.removeNext());
         registerKeyBind(dismissNextKey, () -> PartyMod.runtime.dismissNext());
         hideIf("newAccountDays", () -> !flagNewAccount);

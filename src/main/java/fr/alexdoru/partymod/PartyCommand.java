@@ -12,7 +12,7 @@ import java.util.Locale;
 
 /** /mwp - the only command. Everything else lives in OneConfig and the overlays. */
 public final class PartyCommand extends CommandBase {
-    private static final String[] SUBCOMMANDS = {"help", "settings", "remove", "dismiss", "check", "sync", "clear", "setkey"};
+    private static final String[] SUBCOMMANDS = {"help", "settings", "remove", "dismiss", "trust", "untrust", "unblock", "check", "sync", "clear", "setkey"};
 
     @Override
     public String getCommandName() {
@@ -50,6 +50,15 @@ public final class PartyCommand extends CommandBase {
             case "dismiss":
                 if (requireName(name)) runtime.dismiss(name);
                 break;
+            case "trust":
+                if (requireName(name)) runtime.trust(name);
+                break;
+            case "untrust":
+                if (requireName(name)) runtime.untrust(name);
+                break;
+            case "unblock":
+                if (requireName(name)) runtime.unblock(name);
+                break;
             case "check":
                 if (requireName(name)) runtime.recheck(name);
                 break;
@@ -84,19 +93,23 @@ public final class PartyCommand extends CommandBase {
 
     private static void help() {
         PartyRuntime.chat("Mega Walls Party Mod v" + PartyMod.version());
+        PartyRuntime.chat("Tip: open chat or press " + PartyMod.config.overlayKey.getDisplay()
+                + " to click, hover and drag the party panels - no commands needed.");
         PartyRuntime.chat("/mwp remove <name> - /block add then /p kick");
         PartyRuntime.chat("/mwp dismiss <name> - keep a flagged player");
+        PartyRuntime.chat("/mwp trust|untrust <name> - never flag / flag again");
+        PartyRuntime.chat("/mwp unblock <name> - /block remove a player");
         PartyRuntime.chat("/mwp check <name> - re-run the stat check");
         PartyRuntime.chat("/mwp sync - send /p list and check everyone");
         PartyRuntime.chat("/mwp clear - clear the log and blocked overlays");
         PartyRuntime.chat("/mwp setkey <key> - set your Hypixel API key");
-        PartyRuntime.chat("/mwp settings - open OneConfig (move overlays via Edit HUD)");
+        PartyRuntime.chat("/mwp settings - open OneConfig");
     }
 
     @Override
     public List<String> addTabCompletionOptions(ICommandSender sender, String[] args, BlockPos pos) {
         if (args.length == 1) return getListOfStringsMatchingLastWord(args, SUBCOMMANDS);
-        if (args.length == 2 && Arrays.asList("remove", "kick", "dismiss", "check").contains(args[0].toLowerCase(Locale.ROOT))) {
+        if (args.length == 2 && Arrays.asList("remove", "kick", "dismiss", "trust", "untrust", "unblock", "check").contains(args[0].toLowerCase(Locale.ROOT))) {
             List<String> names = new ArrayList<>();
             PartyMod.runtime.party.members().forEach(m -> names.add(m.name));
             return getListOfStringsMatchingLastWord(args, names.toArray(new String[0]));

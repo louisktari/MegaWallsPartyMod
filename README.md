@@ -21,17 +21,33 @@ you can remove them with one click: `/block add <name>` followed by `/p kick <na
   - high Mega Walls stats (default: FKDR over 5 or WLR over 2.5)
 
   FKDR and WLR rules only apply once a player has at least 10 games.
-- **Block + kick.** A flagged player gets a chat prompt with **[Block + Kick]** and **[Dismiss]**
-  buttons. Removing a player always sends `/block add <name>`, then `/p kick <name>`, in that
-  order and spaced apart so Hypixel doesn't throttle them.
+- **Block + kick.** Removing a player always sends `/block add <name>`, then `/p kick <name>`,
+  in that order and spaced apart so Hypixel doesn't throttle them.
 - **Competitive-ban auto-removal.** If queueing fails with
   `You cannot queue for this mode due to <name> not being able to play competitive games!`,
   that player is blocked and kicked straight away.
-- **Overlays.** Four separate on-screen panels, each movable and scalable like its own chat window:
-  - **Party log:** joins, leaves, flags and actions, with timestamps
-  - **Party members:** colour-coded by status (green checked, gold flagged, yellow pending)
-  - **To review:** flagged players and their reasons
-  - **Blocked players:** everyone removed this session, and why
+- **Trusted players.** Trust your regulars once and they are never flagged again (saved to
+  `config/megawallspartymod/trusted.json`).
+
+## Hosting without commands
+
+Four panels sit on your screen like extra chat windows:
+
+| Panel | Shows | Buttons |
+|---|---|---|
+| **To review** | Flagged players and why. The title flashes gold while someone is waiting. | **Kick**, **Keep**, **Trust** on each player; **Kick all** (click twice to confirm) |
+| **Party members** | Everyone in the party, colour-coded (green checked, gold flagged, aqua trusted, yellow pending) with rank, games and FKDR | **Sync**, **Re-check**, **Settings**; hover a player for **Kick**, **Trust**, **Check** |
+| **Party log** | Joins, leaves, flags and actions, with timestamps | **Clear** |
+| **Blocked this session** | Everyone removed, and why | hover a player for **Unblock** |
+
+Open chat (`T`), or press **`P`**, and the panels become interactive:
+
+- **Click** a button to act.
+- **Hover** a player to see their stats (rank, level, first login, games, FKDR, WLR, finals) and flag reasons.
+- **Drag** a panel by its title bar to move it.
+
+While you play they're display-only, so they never get in the way. Flagged players also get
+a chat line with clickable **[Block + Kick]**, **[Keep]** and **[Trust]** buttons, and a sound.
 
 ## Setup
 
@@ -40,7 +56,7 @@ you can remove them with one click: `/block add <name>` followed by `/p kick <na
    OneConfig is downloaded automatically on first launch.
 2. Get a Hypixel API key from [developer.hypixel.net](https://developer.hypixel.net) and run
    `/mwp setkey <key>`, or paste it into **OneConfig → Mega Walls Party Mod → Hypixel API**.
-3. Arrange the overlays with **OneConfig → Edit HUD**.
+3. Join a party and press **P** to drag the panels where you want them.
 
 ## Commands
 
@@ -48,13 +64,15 @@ you can remove them with one click: `/block add <name>` followed by `/p kick <na
 |---|---|
 | `/mwp remove <name>` | `/block add` then `/p kick` the player |
 | `/mwp dismiss <name>` | keep a flagged player and take them out of review |
+| `/mwp trust <name>` / `untrust <name>` | never flag a player / flag them again |
+| `/mwp unblock <name>` | `/block remove` a player |
 | `/mwp check <name>` | re-run a player's stat check |
 | `/mwp sync` | send `/p list` and check every member |
 | `/mwp clear` | clear the log and blocked overlays |
 | `/mwp setkey <key>` | save your Hypixel API key |
 | `/mwp settings` | open the OneConfig settings |
 
-You can also set keybinds in OneConfig to remove or dismiss the next player waiting for review.
+Every command has a button in the panels. You can also set keybinds in OneConfig to kick or keep the next player waiting for review.
 
 ## Settings (OneConfig)
 
@@ -62,7 +80,7 @@ You can also set keybinds in OneConfig to remove or dismiss the next player wait
 |---|---|
 | Flags | Turn each rule on or off and adjust its threshold |
 | Actions | Competitive auto-removal (on), auto-remove flagged joins (off), chat prompt, sound, keybinds, gap between commands |
-| Overlays | Turn each panel on or off, set max lines, hide when empty |
+| Overlays | Interactive overlay key (P), turn each panel on or off, scale, width, max rows, background opacity, hide empty panels, reset positions |
 | Hypixel API | API key, lookups per minute, cache duration, re-check the whole party |
 
 ## Building

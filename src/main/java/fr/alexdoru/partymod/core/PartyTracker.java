@@ -17,7 +17,7 @@ import java.util.Map;
  */
 public final class PartyTracker {
 
-    public enum Status { CHECKING, CLEAN, FLAGGED, UNAVAILABLE, DISMISSED, REMOVED }
+    public enum Status { CHECKING, CLEAN, FLAGGED, UNAVAILABLE, DISMISSED, TRUSTED, REMOVED }
 
     public static final class Member {
         public final String name;
@@ -120,8 +120,20 @@ public final class PartyTracker {
         return out;
     }
 
-    public void clearLogs() {
+    public boolean unrecordBlocked(String name) {
+        return blocked.removeIf(b -> b.name.equalsIgnoreCase(name));
+    }
+
+    public void clearLog() {
         log.clear();
+    }
+
+    public void clearBlocked() {
         blocked.clear();
+    }
+
+    public void clearLogs() {
+        clearLog();
+        clearBlocked();
     }
 }
