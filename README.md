@@ -4,30 +4,33 @@
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.8.9-brightgreen)](https://files.minecraftforge.net/)
 
 A Forge 1.8.9 client mod for running Hypixel Mega Walls parties. Every player who joins
-your party is stat-checked against the Hypixel API. Suspicious players are flagged, and
-you can remove them with one click: `/block add <name>` followed by `/p kick <name>`.
+your party is stat-checked against the Hypixel API, gets a colour-coded stat card and a verdict,
+and can be removed with one click or one key. Removing a player sends `/block add <name>` followed by `/p kick <name>`.
 
 ## What it does
 
-- **Stat checks on join.** Each new party member is looked up through the Mojang and Hypixel APIs.
-  `/mwp sync` sends `/p list` and checks everyone who is already in the party.
-- **Flags.** A player is flagged for review when they match any enabled rule:
-  - has never joined Hypixel
-  - new Hypixel account (default: under 30 days old)
-  - no rank
-  - low network level (default: under 10)
-  - few Mega Walls games (default: under 50 wins + losses)
-  - low Mega Walls stats (default: FKDR under 0.5)
-  - high Mega Walls stats (default: FKDR over 5 or WLR over 2.5)
+- **Stat checks on join.** New members are looked up on Hypixel straight away. The UUID comes
+  from the tab list when the player is in your lobby, which saves a Mojang lookup.
+  **Sync** (or `/mwp sync`) checks everyone already in the party.
+- **Strong and weak flags.** Each card gets a verdict:
+  - **KICK?** (red): a *strong* flag. The player has never joined Hypixel, the account is under 7 days old, or you removed them before.
+  - **REVIEW** (gold): a *weak* flag. No rank, low network level, few Mega Walls games, or unusually low or high FKDR/WLR.
+  - **OK** (green) / **TRUSTED** (aqua)
 
+  All thresholds can be changed. Pick a **Lenient / Balanced / Strict** preset, then fine-tune.
   FKDR and WLR rules only apply once a player has at least 10 games.
-- **Block + kick.** Removing a player always sends `/block add <name>`, then `/p kick <name>`,
-  in that order and spaced apart so Hypixel doesn't throttle them.
+- **Block + kick.** Removing a player always sends `/block add`, then `/p kick`, spaced apart so
+  Hypixel doesn't throttle them. Every removal can be **undone for 10 seconds**: the commands are
+  cancelled if they haven't been sent yet, otherwise the player is unblocked and re-invited.
 - **Competitive-ban auto-removal.** If queueing fails with
   `You cannot queue for this mode due to <name> not being able to play competitive games!`,
   that player is blocked and kicked straight away.
-- **Trusted players.** Trust your regulars once and they are never flagged again (saved to
-  `config/megawallspartymod/trusted.json`).
+- **Queue guard.** If you type `/play ...` while someone is still waiting for review, the mod asks
+  whether to **[Kick them + queue]** or **[Queue anyway]** first.
+- **Remembers removals.** Everyone you remove is saved, so if they rejoin later their card shows
+  "Removed before (2 Oct)" as a strong flag.
+- **Trusted players.** Regulars you trust are never flagged. Manage the list with the Trust buttons
+  or in OneConfig.
 
 ## Hosting without commands
 
@@ -35,10 +38,10 @@ Four panels sit on your screen like extra chat windows:
 
 | Panel | Shows | Buttons |
 |---|---|---|
-| **To review** | A stat card for each flagged player, with the reasons. The title flashes gold while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice to confirm) |
-| **Party** | A stat card for every member, newest first. New joins are tagged **NEW** for a minute, and each card has a verdict badge: OK, N FLAGS, TRUSTED, checking... | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Check** |
-| **Party log** | Joins, leaves, flags and actions with timestamps; long lines wrap | **Clear** |
-| **Blocked this session** | Everyone removed, why, and who removed them | hover for **Unblock** |
+| **To review** | A stat card per flagged player, strong flags first, with reasons in red or gold. The title flashes while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice) |
+| **Party** | A stat card for every member, newest first, with a verdict badge. New joins are tagged **NEW** for a minute. Shows a warning if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Check** |
+| **Party log** | Joins, leaves, flags and actions with timestamps | **Undo** on removals (10 s), **Clear** |
+| **Blocked players** | Everyone you've removed (saved across sessions), why, when, and by whom | hover for **Unblock**; **Forget all** |
 
 Each stat card reads like Hypixel. The name is coloured by rank, and the stats use traffic-light colours based on your flag thresholds: **green** is fine, **yellow** is borderline, **red** matches a flag.
 
@@ -48,49 +51,54 @@ NEW [MVP+] Halloweenify                     [OK]
     FKDR 1.39 | WLR 0.43 | Finals 3,780
 ```
 
-Open chat (`T`), or press **`P`**, and the panels become interactive:
+Press **P** (or open chat) and the panels become interactive:
 
-- **Click** a button to act.
-- **Hover** a card to see full colour-coded stats and flag reasons.
-- **Scroll** with the mouse wheel over a panel to see more entries.
-- **Drag** a panel by its title bar to move it.
+- **K / J / T**: kick, keep or trust the top player in the review queue. This works only on the P screen, not in chat.
+- **Click** a button to act; **hover** a card for full colour-coded stats.
+- **Scroll** over a panel to see more; **drag** a title bar to move a panel; **click** a title to fold it.
 
-While you play they're display-only, so they never get in the way. Flagged players also get
-a chat line with clickable **[Block + Kick]**, **[Keep]** and **[Trust]** buttons, and a sound.
+While you play the panels only display, and during a Mega Walls match they shrink to a small
+"N waiting for review" badge. Flagged players also get a chat line with
+**[Block + Kick] [Keep] [Trust]** buttons, plus a sound that's lower-pitched for strong flags.
 
 ## Setup
 
 1. Install Forge for 1.8.9 and put the jar from
    [Releases](https://github.com/louisktari/MegaWallsPartyMod/releases) in your `mods` folder.
    OneConfig is downloaded automatically on first launch.
-2. Get a Hypixel API key from [developer.hypixel.net](https://developer.hypixel.net) and run
-   `/mwp setkey <key>`, or paste it into **OneConfig → Mega Walls Party Mod → Hypixel API**.
-3. Join a party and press **P** to drag the panels where you want them.
+2. Open **OneConfig → Mega Walls Party Mod → Getting started**. Paste your key from
+   [developer.hypixel.net](https://developer.hypixel.net) and press **Test key**. `/mwp setkey <key>` also works.
+3. Join a party, press **P**, and drag the panels where you want them.
+
+## Settings (OneConfig)
+
+| Page | What's there |
+|---|---|
+| Getting started | API key + **Test key**, panel keybind + **Open**, flag preset |
+| Flags | Each rule's on/off switch next to its threshold; defaults are shown in the hover description |
+| Actions | Competitive auto-removal (on), auto-remove strong flags (off), queue guard (on), chat prompt, sound, keybinds, command gap |
+| Overlays | Panels on/off, quiet during matches, scale, width, entries per panel, opacity, reset positions |
+| Trusted players | Editable list, one name per line |
+| Advanced | Lookups per minute, cache, re-check party, clear saved blocked history |
+
+Panels are positioned by dragging them in-game, **not** with OneConfig's Edit HUD.
 
 ## Commands
 
+You shouldn't need these, because every action has a button. They're there for keybind macros:
+
 | Command | Action |
 |---|---|
+| `/mwp panels` | open the interactive panels (same as P) |
 | `/mwp remove <name>` | `/block add` then `/p kick` the player |
-| `/mwp dismiss <name>` | keep a flagged player and take them out of review |
+| `/mwp dismiss <name>` | keep a flagged player |
 | `/mwp trust <name>` / `untrust <name>` | never flag a player / flag them again |
 | `/mwp unblock <name>` | `/block remove` a player |
 | `/mwp check <name>` | re-run a player's stat check |
 | `/mwp sync` | send `/p list` and check every member |
-| `/mwp clear` | clear the log and blocked overlays |
-| `/mwp setkey <key>` | save your Hypixel API key |
-| `/mwp settings` | open the OneConfig settings |
-
-Every command has a button in the panels. You can also set keybinds in OneConfig to kick or keep the next player waiting for review.
-
-## Settings (OneConfig)
-
-| Section | What you can change |
-|---|---|
-| Flags | Turn each rule on or off and adjust its threshold |
-| Actions | Competitive auto-removal (on), auto-remove flagged joins (off), chat prompt, sound, keybinds, gap between commands |
-| Overlays | Interactive overlay key (P), turn each panel on or off, scale, width, max rows, background opacity, hide empty panels, reset positions |
-| Hypixel API | API key, lookups per minute, cache duration, re-check the whole party |
+| `/mwp clear` | clear the party log |
+| `/mwp setkey <key>` / `testkey` | save / test your Hypixel API key |
+| `/mwp settings` | open OneConfig |
 
 ## Building
 
@@ -102,6 +110,8 @@ Building locally needs JDK 8:
 ```bash
 ./gradlew build      # jar in build/libs/, unit tests included
 ```
+
+Data files live in `config/megawallspartymod/` (`trusted.json`, `blocked-history.json`).
 
 ## Credits
 

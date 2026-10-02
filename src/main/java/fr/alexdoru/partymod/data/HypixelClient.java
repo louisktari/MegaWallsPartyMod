@@ -68,10 +68,13 @@ public final class HypixelClient {
     /**
      * Queues a lookup. The callback runs on the worker thread.
      *
+     * @param knownUuid the player's UUID if already known (e.g. from the tab list), which
+     *                  skips the Mojang lookup; null to resolve it from the name
+     *
      * @return false if the same player is already being looked up
      */
-    public synchronized boolean lookup(String name, String apiKey, int cacheMinutes, int requestsPerMinute,
-                                       Consumer<Result> callback) {
+    public synchronized boolean lookup(String name, String knownUuid, String apiKey, int cacheMinutes,
+                                       int requestsPerMinute, Consumer<Result> callback) {
         String key = name.toLowerCase(Locale.ROOT);
         Cached hit = cache.get(key);
         if (hit != null && System.currentTimeMillis() - hit.at < cacheMinutes * 60_000L) {
@@ -81,7 +84,7 @@ public final class HypixelClient {
         if (!inFlight.add(key)) return false;
         long spacing = 60_000L / Math.max(1, requestsPerMinute);
         worker.submit(() -> {
-            Result result = fetch(name, apiKey, spacing);
+            Result result = fetch(name, knownUuid, apiKey, spacing);
             synchronized (this) {
                 inFlight.remove(key);
                 if (result.stats != null) {
@@ -106,16 +109,22 @@ public final class HypixelClient {
         worker.shutdownNow();
     }
 
-    private Result fetch(String name, String apiKey, long spacing) {
+    private Result fetch(String name, String knownUuid, String apiKey, long spacing) {
         if (!ChatEvents.validName(name)) return new Result(name, null, "Invalid username");
         String key = apiKey == null ? "" : apiKey.trim();
         if (key.isEmpty()) return new Result(name, null, "No Hypixel API key set (/mwp setkey <key>)");
         if (!key.matches("[A-Za-z0-9-]{8,64}")) return new Result(name, null, "Hypixel API key looks malformed");
         try {
             waitForSlot(spacing);
-            JsonObject profile = get("https://api.mojang.com/users/profiles/minecraft/" + name, null);
-            String uuid = profile == null ? null : PlayerStats.string(profile, "id");
-            String realName = profile == null ? null : PlayerStats.string(profile, "name");
+            String uuid, realName;
+            if (knownUuid != null && knownUuid.matches("[0-9a-fA-F]{32}")) {
+                uuid = knownUuid;
+                realName = name;
+            } else {
+                JsonObject profile = get("https://api.mojang.com/users/profiles/minecraft/" + name, null);
+                uuid = profile == null ? null : PlayerStats.string(profile, "id");
+                realName = profile == null ? null : PlayerStats.string(profile, "name");
+            }
             if (uuid == null || !uuid.matches("[0-9a-fA-F]{32}")) {
                 return new Result(name, null, "Unknown Minecraft account");
             }

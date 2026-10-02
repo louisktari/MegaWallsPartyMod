@@ -44,6 +44,15 @@ public final class CommandQueue {
         nextAt = now + backoffMs;
     }
 
+    /**
+     * Drops a command that has not been sent yet.
+     *
+     * @return true if it was still waiting (so it never reached the server)
+     */
+    public boolean cancel(String command) {
+        return queue.remove(command);
+    }
+
     public void clear() {
         queue.clear();
         last = null;

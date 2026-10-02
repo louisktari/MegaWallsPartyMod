@@ -1,11 +1,13 @@
 package fr.alexdoru.partymod;
 
+import fr.alexdoru.partymod.ui.OverlayScreen;
+import fr.alexdoru.partymod.ui.Panels;
+import net.minecraft.client.Minecraft;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import fr.alexdoru.partymod.ui.Panels;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -20,6 +22,7 @@ public final class PartyMod {
 
     public static PartyConfig config;
     public static PartyRuntime runtime;
+    private File dataDir;
 
     /** Jar version from the manifest (set by Gradle); "dev" when run from an IDE. */
     public static String version() {
@@ -27,21 +30,28 @@ public final class PartyMod {
         return v == null ? "dev" : v;
     }
 
-    private File trustedFile;
-
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
-        trustedFile = new File(event.getModConfigurationDirectory(), "megawallspartymod/trusted.json");
+        dataDir = new File(event.getModConfigurationDirectory(), "megawallspartymod");
     }
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
-        runtime = new PartyRuntime(trustedFile);
+        runtime = new PartyRuntime(dataDir);
         config = new PartyConfig();
+        // The trusted file is the source of truth; show it in the OneConfig text box.
+        config.syncTrustedText(runtime.trusted.all());
         MinecraftForge.EVENT_BUS.register(runtime);
         MinecraftForge.EVENT_BUS.register(new Panels());
         ClientCommandHandler.instance.registerCommand(new PartyCommand());
+        ClientCommandHandler.instance.registerCommand(new PlayCommand());
         Runtime.getRuntime().addShutdownHook(new Thread(runtime::shutdown, "MegaWallsPartyMod-shutdown"));
-        LOGGER.info("{} v{} loaded. Type /mwp help in-game.", NAME, version());
+        LOGGER.info("{} v{} loaded. Press P in-game for the party panels.", NAME, version());
+    }
+
+    /** Opens the interactive panel screen (frees the mouse). */
+    public static void openPanels() {
+        Minecraft mc = Minecraft.getMinecraft();
+        mc.addScheduledTask(() -> mc.displayGuiScreen(new OverlayScreen(config.overlayKeyCode())));
     }
 }

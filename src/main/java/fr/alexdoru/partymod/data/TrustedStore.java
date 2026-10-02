@@ -51,6 +51,24 @@ public final class TrustedStore {
         return new ArrayList<>(names.values());
     }
 
+    /** Replaces the whole list (used when the host edits it in OneConfig). Invalid names are skipped. */
+    public synchronized void setAll(Iterable<String> newNames) {
+        names.clear();
+        for (String n : newNames) {
+            String name = n == null ? "" : n.trim();
+            if (ChatEvents.validName(name)) names.put(name.toLowerCase(Locale.ROOT), name);
+        }
+        save();
+    }
+
+    /** Parses free text (one name per line, or separated by commas/spaces). */
+    public static List<String> parse(String text) {
+        List<String> out = new ArrayList<>();
+        if (text == null) return out;
+        for (String token : text.split("[\\s,;]+")) if (!token.isEmpty()) out.add(token);
+        return out;
+    }
+
     private void load() {
         if (file == null || !file.isFile()) return;
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {

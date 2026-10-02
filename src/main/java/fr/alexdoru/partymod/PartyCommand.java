@@ -12,7 +12,7 @@ import java.util.Locale;
 
 /** /mwp - the only command. Everything else lives in OneConfig and the overlays. */
 public final class PartyCommand extends CommandBase {
-    private static final String[] SUBCOMMANDS = {"help", "settings", "remove", "dismiss", "trust", "untrust", "unblock", "check", "sync", "clear", "setkey"};
+    private static final String[] SUBCOMMANDS = {"help", "settings", "panels", "remove", "dismiss", "trust", "untrust", "unblock", "check", "sync", "clear", "setkey", "testkey"};
 
     @Override
     public String getCommandName() {
@@ -43,9 +43,20 @@ public final class PartyCommand extends CommandBase {
             case "settings":
                 PartyMod.config.openGui();
                 break;
+            case "panels":
+                PartyMod.openPanels();
+                break;
+            case "testkey":
+                runtime.testKey();
+                break;
+            case "queue": // used by the queue-guard chat buttons
+                String mode = args.length > 2 ? String.join(" ", Arrays.copyOfRange(args, 2, args.length)) : "";
+                if (name.equals("kick")) runtime.queueAfterKicks(mode);
+                else if (name.equals("force")) runtime.queueAnyway(mode);
+                break;
             case "remove":
             case "kick":
-                if (requireName(name)) runtime.remove(name, runtime.removedBy(), false);
+                if (requireName(name)) runtime.remove(name, "", false, false);
                 break;
             case "dismiss":
                 if (requireName(name)) runtime.dismiss(name);
@@ -67,8 +78,8 @@ public final class PartyCommand extends CommandBase {
                 PartyRuntime.chat("Requested the party list; members will be checked as they appear.");
                 break;
             case "clear":
-                runtime.party.clearLogs();
-                PartyRuntime.chat("Cleared the party log and blocked list overlays.");
+                runtime.party.clearLog();
+                PartyRuntime.chat("Cleared the party log.");
                 break;
             case "setkey":
                 if (name.isEmpty()) {
@@ -78,6 +89,7 @@ public final class PartyCommand extends CommandBase {
                 PartyMod.config.hypixelApiKey = name.trim();
                 PartyMod.config.save();
                 PartyRuntime.chat("Hypixel API key saved.");
+                runtime.testKey();
                 break;
             default:
                 help();
@@ -101,7 +113,7 @@ public final class PartyCommand extends CommandBase {
         PartyRuntime.chat("/mwp unblock <name> - /block remove a player");
         PartyRuntime.chat("/mwp check <name> - re-run the stat check");
         PartyRuntime.chat("/mwp sync - send /p list and check everyone");
-        PartyRuntime.chat("/mwp clear - clear the log and blocked overlays");
+        PartyRuntime.chat("/mwp clear - clear the party log");
         PartyRuntime.chat("/mwp setkey <key> - set your Hypixel API key");
         PartyRuntime.chat("/mwp settings - open OneConfig");
     }

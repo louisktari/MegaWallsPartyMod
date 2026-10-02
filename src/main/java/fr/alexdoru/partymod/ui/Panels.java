@@ -8,6 +8,7 @@ import fr.alexdoru.partymod.core.PartyTracker;
 import fr.alexdoru.partymod.core.PartyTracker.Member;
 import fr.alexdoru.partymod.core.PartyTracker.Status;
 import fr.alexdoru.partymod.core.StatFormat;
+import fr.alexdoru.partymod.data.BlockHistory;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
@@ -105,8 +106,9 @@ public final class Panels {
     private final List<Hit> hits = new ArrayList<>();
     private final Map<Id, Hit> bounds = new EnumMap<>(Id.class);
     private final Map<Id, Integer> scroll = new EnumMap<>(Id.class);
-    private Id dragging;
+    private Id dragging, pendingFold;
     private float dragOffsetX, dragOffsetY;
+    private int pressX, pressY;
     private String armed = "";
     private long armedAt;
     private List<String> tooltip;
@@ -124,7 +126,24 @@ public final class Panels {
         Minecraft mc = Minecraft.getMinecraft();
         if (interactiveScreen(mc.currentScreen) || mc.gameSettings.showDebugInfo) return;
         if (PartyMod.runtime == null || !PartyMod.runtime.active()) return;
+        if (PartyMod.runtime.inMatch() && PartyMod.config.quietInMatch) {
+            drawQuietBadge(event.resolution);
+            return;
+        }
         draw(event.resolution, -1, -1, false);
+    }
+
+    /** Mid-match: only a small reminder when someone is waiting for review. */
+    private void drawQuietBadge(ScaledResolution sr) {
+        int waiting = PartyMod.runtime.party.toReview().size();
+        if (waiting == 0) return;
+        FontRenderer fr = Minecraft.getMinecraft().fontRendererObj;
+        String text = StatFormat.GOLD + waiting + " waiting for review" + StatFormat.GRAY + " - press "
+                + PartyMod.config.overlayKey.getDisplay();
+        float[] pos = position(Id.REVIEW, sr);
+        int w = fr.getStringWidth(text) + 6;
+        Gui.drawRect((int) pos[0], (int) pos[1], (int) pos[0] + w, (int) pos[1] + 12, 0xA0000000);
+        fr.drawStringWithShadow(text, pos[0] + 3, pos[1] + 2, TEXT);
     }
 
     @SubscribeEvent
@@ -156,12 +175,15 @@ public final class Panels {
             if (press(x, y, sr)) event.setCanceled(true);
         } else if (button == 0) {
             if (dragging != null) {
+                if (pendingFold != null) toggleFold(pendingFold);
                 dragging = null;
+                pendingFold = null;
                 PartyMod.config.save();
                 event.setCanceled(true);
             }
         } else if (button == -1 && dragging != null) {
-            move(dragging, x - dragOffsetX, y - dragOffsetY, sr);
+            if (Math.abs(x - pressX) > 2 || Math.abs(y - pressY) > 2) pendingFold = null; // a drag, not a click
+            if (pendingFold == null) move(dragging, x - dragOffsetX, y - dragOffsetY, sr);
         }
     }
 
@@ -171,6 +193,9 @@ public final class Panels {
             if (!hit.contains(x, y)) continue;
             if (hit.dragHandle != null) {
                 dragging = hit.dragHandle;
+                pendingFold = hit.dragHandle;
+                pressX = x;
+                pressY = y;
                 float[] pos = position(hit.dragHandle, sr);
                 dragOffsetX = x - pos[0];
                 dragOffsetY = y - pos[1];
@@ -202,7 +227,7 @@ public final class Panels {
         if (tooltip != null) drawTooltip(tooltip, tooltipX, tooltipY, sr);
         if (interactive && Minecraft.getMinecraft().currentScreen instanceof OverlayScreen) {
             FontRenderer fr = Minecraft.getMinecraft().fontRendererObj;
-            String hint = "Drag title bars to move  -  scroll to see more  -  hover players for stats  -  ESC to close";
+            String hint = "K kick / J keep / T trust the top player  -  drag a title to move, click it to fold  -  scroll for more  -  ESC closes";
             fr.drawStringWithShadow(hint, (sr.getScaledWidth() - fr.getStringWidth(hint)) / 2f, sr.getScaledHeight() - 12, MUTED);
         }
     }
@@ -232,13 +257,22 @@ public final class Panels {
         List<List<String>> details = new ArrayList<>();
         for (Card card : visible) details.add(detailLines(card, fr, textWidth - 4));
 
-        boolean toolbar = interactive && !model.toolbar.isEmpty();
+        boolean folded = folded(model.id);
+        if (folded) {
+            visible = Collections.emptyList();
+            details.clear();
+        }
+        boolean toolbar = interactive && !folded && !model.toolbar.isEmpty();
         int height = HEADER + (toolbar ? LINE + 2 : 0) + PAD;
         if (first > 0) height += LINE;
         for (List<String> d : details) height += LINE * (1 + d.size()) + CARD_GAP;
-        int below = model.cards.size() - first - visible.size();
-        if (visible.isEmpty() || below > 0) height += LINE;
-        height += PAD - CARD_GAP + 1;
+        int below = folded ? 0 : model.cards.size() - first - visible.size();
+        if (folded) {
+            height = HEADER;
+        } else {
+            if (visible.isEmpty() || below > 0) height += LINE;
+            height += PAD - CARD_GAP + 1;
+        }
 
         float[] pos = position(model.id, sr);
         float px = clamp(pos[0], 0, sr.getScaledWidth() - width * scale);
@@ -256,7 +290,13 @@ public final class Panels {
         boolean flash = model.alert && (System.currentTimeMillis() / 500) % 2 == 0;
         Gui.drawRect(0, 0, width, HEADER, Math.min(255, alpha + 70) << 24 | (flash ? 0x5A4A2A : 0x2A2140));
         Gui.drawRect(0, HEADER - 1, width, HEADER, 0xFF000000 | (model.alert ? 0xC89B3C : 0x7A55C8));
-        fr.drawStringWithShadow(fr.trimStringToWidth(model.title, textWidth), PAD, 2, model.alert ? GOLD : ACCENT);
+        fr.drawStringWithShadow(fr.trimStringToWidth(model.title, textWidth - 14), PAD, 2, model.alert ? GOLD : ACCENT);
+        if (interactive || folded) fr.drawStringWithShadow(folded ? "[+]" : "[-]", width - PAD - fr.getStringWidth("[+]"), 2, MUTED);
+        if (folded) {
+            if (interactive) hits.add(firstHit, new Hit(px, py, px + width * scale, py + HEADER * scale, null, model.id));
+            GlStateManager.popMatrix();
+            return;
+        }
 
         int y = HEADER + 2;
         if (toolbar) {
@@ -377,7 +417,7 @@ public final class Panels {
                 card.lines.add(StatFormat.YELLOW + m.error);
                 break;
             case FLAGGED:
-                card.badge = StatFormat.RED + "[" + m.reasons.size() + (m.reasons.size() == 1 ? " FLAG]" : " FLAGS]");
+                card.badge = m.strong() ? StatFormat.RED + "[KICK?]" : StatFormat.GOLD + "[REVIEW]";
                 break;
             case TRUSTED:
                 card.badge = StatFormat.AQUA + "[TRUSTED]";
@@ -393,7 +433,14 @@ public final class Panels {
                 break;
         }
         card.lines.addAll(StatFormat.card(m.stats, options(), now));
-        if (showReasons && !m.reasons.isEmpty()) card.lines.add(StatFormat.GOLD + "! " + String.join(", ", m.reasons));
+        if (showReasons && !m.flags.isEmpty()) {
+            StringBuilder b = new StringBuilder();
+            for (Flagger.Flag f : m.flags) {
+                if (b.length() > 0) b.append(StatFormat.GRAY).append(", ");
+                b.append(f.strong ? StatFormat.RED : StatFormat.GOLD).append(f.text);
+            }
+            card.lines.add(StatFormat.GOLD + "! " + b);
+        }
         card.tooltip = tooltip(m, now);
         return card;
     }
@@ -408,7 +455,7 @@ public final class Panels {
         for (Member member : queue) {
             Card card = playerCard(member, true);
             String name = member.name;
-            card.buttons.add(new Button("Kick", RED, () -> rt.remove(name, String.join(", ", member.reasons) + " - " + rt.removedBy(), false)));
+            card.buttons.add(new Button("Kick", RED, () -> rt.remove(name, String.join(", ", member.reasons), false, false)));
             card.buttons.add(new Button("Keep", GREEN, () -> rt.dismiss(name)));
             card.buttons.add(new Button("Trust", BLUE, () -> rt.trust(name)));
             m.cards.add(card);
@@ -423,6 +470,14 @@ public final class Panels {
         m.toolbar.add(new Button("Sync", ACCENT, rt::syncParty));
         m.toolbar.add(new Button("Re-check all", ACCENT, rt::recheckAll));
         m.toolbar.add(new Button("Settings", MUTED, () -> PartyMod.config.openGui()));
+        PartyRuntime.KeyStatus key = rt.keyStatus();
+        if (key == PartyRuntime.KeyStatus.MISSING || key == PartyRuntime.KeyStatus.REJECTED) {
+            Card warn = new Card();
+            warn.title = StatFormat.RED + (key == PartyRuntime.KeyStatus.MISSING ? "No Hypixel API key set" : "Hypixel rejected your API key");
+            warn.lines.add(StatFormat.GRAY + "Players can't be stat-checked until this is fixed.");
+            warn.buttons.add(new Button("Fix", GOLD, () -> PartyMod.config.openGui()));
+            m.cards.add(warn);
+        }
         // Newest first so the player who just joined is always at the top.
         List<Member> list = new ArrayList<>(party.members());
         Collections.reverse(list);
@@ -431,7 +486,7 @@ public final class Panels {
             card.buttonsOnHover = true;
             String name = member.name;
             if (member.status != Status.REMOVED) {
-                card.buttons.add(new Button("Kick", RED, () -> rt.remove(name, rt.removedBy(), false)));
+                card.buttons.add(new Button("Kick", RED, () -> rt.remove(name, "", false, false)));
             }
             if (member.status == Status.TRUSTED) card.buttons.add(new Button("Untrust", MUTED, () -> rt.untrust(name)));
             else card.buttons.add(new Button("Trust", BLUE, () -> rt.trust(name)));
@@ -444,12 +499,20 @@ public final class Panels {
     private Model log(PartyTracker party) {
         Model m = new Model(Id.LOG, "Party log");
         m.toolbar.add(new Button("Clear", MUTED, party::clearLog));
-        for (String line : party.log(100)) {
+        long now = System.currentTimeMillis();
+        PartyRuntime rt = PartyMod.runtime;
+        for (PartyTracker.LogEntry entry : party.log(100)) {
             Card card = new Card();
-            // Log entries use the title slot only; long ones wrap onto detail lines.
-            List<String> wrapped = Minecraft.getMinecraft().fontRendererObj.listFormattedStringToWidth(line, (int) PartyMod.config.panelWidth - PAD * 2);
+            String line = StatFormat.DARK_GRAY + entry.time + " " + StatFormat.RESET + entry.text;
+            int room = (int) PartyMod.config.panelWidth - PAD * 2 - (entry.undoable(now) ? 40 : 0);
+            // Log entries use the title slot; long ones wrap onto detail lines.
+            List<String> wrapped = Minecraft.getMinecraft().fontRendererObj.listFormattedStringToWidth(line, room);
             card.title = wrapped.isEmpty() ? "" : wrapped.get(0);
             for (int i = 1; i < wrapped.size(); i++) card.lines.add(wrapped.get(i));
+            if (entry.undoable(now)) {
+                String name = entry.undoName;
+                card.buttons.add(new Button("Undo", GREEN, () -> rt.undo(name)));
+            }
             m.cards.add(card);
         }
         return m;
@@ -457,14 +520,15 @@ public final class Panels {
 
     private Model blocked(PartyTracker party) {
         PartyRuntime rt = PartyMod.runtime;
-        Model m = new Model(Id.BLOCKED, "Blocked this session");
+        Model m = new Model(Id.BLOCKED, "Blocked players" + (rt.history.size() == 0 ? "" : " (" + rt.history.size() + ")"));
         m.empty = "Nobody blocked yet";
-        m.toolbar.add(new Button("Clear list", MUTED, party::clearBlocked));
-        for (PartyTracker.Blocked b : party.blocked(100)) {
+        m.toolbar.add(new Button("Forget all", MUTED, rt::clearHistory, "forget-all"));
+        long now = System.currentTimeMillis();
+        for (BlockHistory.Entry b : rt.history.recent(100)) {
             Card card = new Card();
             card.title = StatFormat.RED + b.name;
-            card.badge = StatFormat.DARK_GRAY + b.time;
-            card.lines.add(StatFormat.GRAY + b.reason);
+            card.badge = StatFormat.DARK_GRAY + b.when(now);
+            card.lines.add(PartyRuntime.describe(b));
             card.buttonsOnHover = true;
             String name = b.name;
             card.buttons.add(new Button("Unblock", GREEN, () -> rt.unblock(name)));
@@ -484,8 +548,30 @@ public final class Panels {
             lines.add(StatFormat.YELLOW + member.error);
         }
         if (member.status == Status.TRUSTED) lines.add(StatFormat.AQUA + "Trusted - never flagged");
-        for (String reason : member.reasons) lines.add(StatFormat.GOLD + "! " + reason);
+        for (Flagger.Flag f : member.flags) lines.add((f.strong ? StatFormat.RED + "!! " : StatFormat.GOLD + "! ") + f.text);
         return lines;
+    }
+
+    // ------------------------------------------------------------------ folding (stored in OneConfig)
+
+    private static boolean folded(Id id) {
+        PartyConfig c = PartyMod.config;
+        switch (id) {
+            case REVIEW: return c.foldReview;
+            case MEMBERS: return c.foldMembers;
+            case LOG: return c.foldLog;
+            default: return c.foldBlocked;
+        }
+    }
+
+    private static void toggleFold(Id id) {
+        PartyConfig c = PartyMod.config;
+        switch (id) {
+            case REVIEW: c.foldReview = !c.foldReview; break;
+            case MEMBERS: c.foldMembers = !c.foldMembers; break;
+            case LOG: c.foldLog = !c.foldLog; break;
+            default: c.foldBlocked = !c.foldBlocked; break;
+        }
     }
 
     // ------------------------------------------------------------------ positions (stored in OneConfig)

@@ -3,15 +3,22 @@ package fr.alexdoru.partymod;
 import fr.alexdoru.partymod.core.ChatEvents;
 import fr.alexdoru.partymod.core.CommandQueue;
 import fr.alexdoru.partymod.core.Flagger;
+import fr.alexdoru.partymod.core.MatchDetector;
 import fr.alexdoru.partymod.core.PartyTracker;
 import fr.alexdoru.partymod.core.PartyTracker.Member;
 import fr.alexdoru.partymod.core.PartyTracker.Status;
 import fr.alexdoru.partymod.core.StatFormat;
+import fr.alexdoru.partymod.data.BlockHistory;
 import fr.alexdoru.partymod.data.HypixelClient;
 import fr.alexdoru.partymod.data.TrustedStore;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.event.ClickEvent;
 import net.minecraft.event.HoverEvent;
+import net.minecraft.scoreboard.Score;
+import net.minecraft.scoreboard.ScoreObjective;
+import net.minecraft.scoreboard.ScorePlayerTeam;
+import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatStyle;
 import net.minecraft.util.EnumChatFormatting;
@@ -22,22 +29,34 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
 import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /** Reacts to party chat, runs stat checks and sends block + kick commands. Client thread only. */
 public final class PartyRuntime {
+
+    public enum KeyStatus { UNKNOWN, OK, MISSING, REJECTED }
+
     public final PartyTracker party = new PartyTracker();
+    public final TrustedStore trusted;
+    public final BlockHistory history;
     private final CommandQueue commands = new CommandQueue();
     private final HypixelClient api = new HypixelClient(PartyMod.version());
-    public final TrustedStore trusted;
 
-    public PartyRuntime(File trustedFile) {
-        trusted = new TrustedStore(trustedFile);
-    }
+    private KeyStatus keyStatus = KeyStatus.UNKNOWN;
+    private boolean inMatch, onboarded;
+    private long queueBypassUntil;
+    private int ticks;
 
     private static final String PREFIX = EnumChatFormatting.DARK_PURPLE + "[" + EnumChatFormatting.LIGHT_PURPLE + "MWP"
             + EnumChatFormatting.DARK_PURPLE + "] " + EnumChatFormatting.GRAY;
+
+    public PartyRuntime(File dataDir) {
+        trusted = new TrustedStore(new File(dataDir, "trusted.json"));
+        history = new BlockHistory(new File(dataDir, "blocked-history.json"));
+    }
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -47,11 +66,21 @@ public final class PartyRuntime {
                 && mc.getCurrentServerData() != null && ChatEvents.isHypixel(mc.getCurrentServerData().serverIP);
     }
 
+    public boolean inMatch() {
+        return inMatch;
+    }
+
+    public KeyStatus keyStatus() {
+        if (PartyMod.config != null && PartyMod.config.hypixelApiKey.trim().isEmpty()) return KeyStatus.MISSING;
+        return keyStatus;
+    }
+
     @SubscribeEvent
     public void onDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
         Minecraft.getMinecraft().addScheduledTask(() -> {
             commands.clear();
             party.clearMembers();
+            inMatch = false;
         });
     }
 
@@ -60,6 +89,29 @@ public final class PartyRuntime {
         if (event.phase != TickEvent.Phase.END || !active()) return;
         commands.tick(System.currentTimeMillis(), (long) PartyMod.config.commandSpacing,
                 command -> Minecraft.getMinecraft().thePlayer.sendChatMessage(command));
+        if (++ticks % 20 == 0) inMatch = detectMatch();
+        if (!onboarded && ticks > 100) {
+            onboarded = true;
+            if (keyStatus() == KeyStatus.MISSING) {
+                IChatComponent line = new ChatComponentText(PREFIX + "Set your Hypixel API key to start stat-checking party members. ");
+                line.appendSibling(button("[Open settings]", EnumChatFormatting.LIGHT_PURPLE, "/mwp settings", "Opens Getting started"));
+                chat(line);
+            }
+        }
+    }
+
+    private boolean detectMatch() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.theWorld == null) return false;
+        Scoreboard board = mc.theWorld.getScoreboard();
+        ScoreObjective objective = board.getObjectiveInDisplaySlot(1);
+        if (objective == null) return false;
+        List<String> lines = new ArrayList<>();
+        for (Score score : board.getSortedScores(objective)) {
+            lines.add(EnumChatFormatting.getTextWithoutFormattingCodes(
+                    ScorePlayerTeam.formatPlayerName(board.getPlayersTeam(score.getPlayerName()), score.getPlayerName())));
+        }
+        return MatchDetector.inMegaWallsMatch(EnumChatFormatting.getTextWithoutFormattingCodes(objective.getDisplayName()), lines);
     }
 
     public void shutdown() {
@@ -75,7 +127,7 @@ public final class PartyRuntime {
         switch (e.type) {
             case COMPETITIVE_BLOCK:
                 party.log(EnumChatFormatting.RED + e.value + EnumChatFormatting.GRAY + " cannot play competitive games");
-                if (PartyMod.config.autoCompetitive) remove(e.value, "Cannot play competitive games", true);
+                if (PartyMod.config.autoCompetitive) remove(e.value, "Cannot play competitive games", true, true);
                 break;
             case JOIN:
                 onJoin(e.value, true);
@@ -92,8 +144,10 @@ public final class PartyRuntime {
             case REMOVED:
                 if (isSelf(e.value)) {
                     endParty("You left the party");
-                } else if (party.remove(e.value) != null) {
-                    party.log(e.value + (e.type == ChatEvents.Type.LEAVE ? " left" : " was removed"));
+                } else {
+                    Member gone = party.remove(e.value);
+                    if (gone != null) party.log(StatFormat.rankedName(gone.stats, gone.name) + EnumChatFormatting.GRAY
+                            + (e.type == ChatEvents.Type.LEAVE ? " left" : " was removed"));
                 }
                 break;
             case DISBAND:
@@ -114,8 +168,13 @@ public final class PartyRuntime {
         party.log(reason);
     }
 
+    private static String selfName() {
+        Minecraft mc = Minecraft.getMinecraft();
+        return mc.thePlayer == null ? "" : mc.thePlayer.getName();
+    }
+
     private boolean isSelf(String name) {
-        return Minecraft.getMinecraft().thePlayer != null && Minecraft.getMinecraft().thePlayer.getName().equalsIgnoreCase(name);
+        return selfName().equalsIgnoreCase(name);
     }
 
     private void onJoin(String name, boolean live) {
@@ -128,53 +187,85 @@ public final class PartyRuntime {
 
     // ---------------------------------------------------------------- stat checks
 
+    /** The player's v4 UUID from the tab list, if they are in this lobby; saves a Mojang call. */
+    private static String tabUuid(String name) {
+        Minecraft mc = Minecraft.getMinecraft();
+        NetworkPlayerInfo info = mc.getNetHandler() == null ? null : mc.getNetHandler().getPlayerInfo(name);
+        UUID id = info == null || info.getGameProfile() == null ? null : info.getGameProfile().getId();
+        return id != null && id.version() == 4 ? id.toString().replace("-", "") : null;
+    }
+
     private void check(Member m) {
-        if (trusted.isTrusted(m.name)) {
-            m.status = Status.TRUSTED;
-            m.reasons.clear();
-        } else {
-            m.status = Status.CHECKING;
-        }
-        api.lookup(m.name, PartyMod.config.hypixelApiKey, (int) PartyMod.config.cacheMinutes,
+        m.status = trusted.isTrusted(m.name) ? Status.TRUSTED : Status.CHECKING;
+        if (m.status == Status.TRUSTED) m.setFlags(new ArrayList<>());
+        api.lookup(m.name, tabUuid(m.name), PartyMod.config.hypixelApiKey, (int) PartyMod.config.cacheMinutes,
                 (int) PartyMod.config.requestsPerMinute,
                 result -> Minecraft.getMinecraft().addScheduledTask(() -> onResult(m, result)));
     }
 
     private void onResult(Member m, HypixelClient.Result result) {
+        noteKeyStatus(result);
         if (party.get(m.name) != m) return; // left or party changed meanwhile
         m.stats = result.stats;
-        m.reasons.clear();
-        if (trusted.isTrusted(m.name)) {
-            m.status = Status.TRUSTED;
-            return;
-        }
-        if (result.stats == null) {
+        if (result.stats == null && m.status != Status.TRUSTED) {
             m.status = Status.UNAVAILABLE;
             m.error = result.error;
             party.log(EnumChatFormatting.YELLOW + "Could not check " + m.name + ": " + result.error);
             return;
         }
-        m.reasons.addAll(Flagger.evaluate(result.stats, PartyMod.config.flagOptions(), System.currentTimeMillis()));
-        if (m.reasons.isEmpty()) {
-            m.status = Status.CLEAN;
+        evaluate(m, true);
+    }
+
+    /** Applies the flag rules to a member who has stats. */
+    private void evaluate(Member m, boolean announce) {
+        if (m.status == Status.REMOVED) return;
+        if (trusted.isTrusted(m.name)) {
+            m.status = Status.TRUSTED;
+            m.setFlags(new ArrayList<>());
             return;
         }
+        if (m.stats == null) return;
+        List<Flagger.Flag> flags = Flagger.assess(m.stats, PartyMod.config.flagOptions(), System.currentTimeMillis());
+        BlockHistory.Entry before = history.get(m.name);
+        if (before != null && PartyMod.config.flagPreviouslyRemoved) {
+            flags.add(0, new Flagger.Flag("Removed before (" + before.when(System.currentTimeMillis()) + ")", true));
+        }
+        m.setFlags(flags);
+        if (flags.isEmpty()) {
+            if (m.status != Status.DISMISSED) m.status = Status.CLEAN;
+            return;
+        }
+        if (m.status == Status.DISMISSED && !announce) return;
         m.status = Status.FLAGGED;
+        if (!announce) return;
         String summary = String.join(", ", m.reasons);
-        party.log(StatFormat.rankedName(m.stats, m.name) + EnumChatFormatting.GRAY + " flagged: " + EnumChatFormatting.GOLD + summary);
-        if (PartyMod.config.autoRemoveFlagged && m.joinedLive) {
-            remove(m.name, summary, false);
+        party.log(StatFormat.rankedName(m.stats, m.name) + EnumChatFormatting.GRAY + " flagged: "
+                + (m.strong() ? EnumChatFormatting.RED : EnumChatFormatting.GOLD) + summary);
+        if (PartyMod.config.autoRemoveFlagged && m.joinedLive && m.strong()) {
+            remove(m.name, summary, true, false);
             return;
         }
         if (PartyMod.config.flagSound && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.playSound("note.pling", 1.0F, 0.8F);
+            Minecraft.getMinecraft().thePlayer.playSound("note.pling", 1.0F, m.strong() ? 0.6F : 0.9F);
         }
         if (PartyMod.config.chatPrompt) promptInChat(m, summary);
     }
 
+    private void noteKeyStatus(HypixelClient.Result result) {
+        if (result.stats != null) keyStatus = KeyStatus.OK;
+        else if (result.error.contains("rejected")) keyStatus = KeyStatus.REJECTED;
+        else if (result.error.contains("No Hypixel API key")) keyStatus = KeyStatus.MISSING;
+    }
+
+    /** Re-applies the rules after a settings change, without new API calls or chat spam. */
+    public void reassessAll() {
+        for (Member m : party.members()) evaluate(m, false);
+    }
+
     private void promptInChat(Member m, String summary) {
-        IChatComponent line = new ChatComponentText(PREFIX + StatFormat.rankedName(m.stats, m.name)
-                + EnumChatFormatting.GRAY + " looks suspicious: " + EnumChatFormatting.GOLD + summary + " ");
+        IChatComponent line = new ChatComponentText(PREFIX + StatFormat.rankedName(m.stats, m.name) + EnumChatFormatting.GRAY
+                + (m.strong() ? " should probably go: " + EnumChatFormatting.RED : " looks suspicious: " + EnumChatFormatting.GOLD)
+                + summary + " ");
         line.appendSibling(button("[Block + Kick]", EnumChatFormatting.RED, "/mwp remove " + m.name,
                 "Sends /block add " + m.name + " then /p kick " + m.name));
         line.appendSibling(new ChatComponentText(" "));
@@ -213,30 +304,73 @@ public final class PartyRuntime {
         check(m);
     }
 
+    /** Looks the host up to prove the key works, and reports in chat. */
+    public void testKey() {
+        String self = selfName();
+        if (self.isEmpty()) {
+            chat("Join a world first, then press Test key.");
+            return;
+        }
+        api.forget(self);
+        chat("Testing your API key...");
+        api.lookup(self, null, PartyMod.config.hypixelApiKey, 0, (int) PartyMod.config.requestsPerMinute,
+                result -> Minecraft.getMinecraft().addScheduledTask(() -> {
+                    noteKeyStatus(result);
+                    if (result.stats != null) chat(EnumChatFormatting.GREEN + "API key works - looked you up as "
+                            + StatFormat.rankedName(result.stats, result.stats.name) + EnumChatFormatting.GREEN + ".");
+                    else chat(EnumChatFormatting.RED + "API key problem: " + result.error);
+                }));
+    }
+
+    public static void openUrl(String url) {
+        try {
+            java.awt.Desktop.getDesktop().browse(new URI(url));
+        } catch (Exception | LinkageError e) {
+            chat("Open " + url + " in your browser.");
+        }
+    }
+
     // ---------------------------------------------------------------- actions
 
     /**
      * Sends /block add then /p kick for the player, in that order.
      *
-     * @param urgent jump the queue (used for the competitive-ban queue refusal)
+     * @param reason    why (flag summary, or "" for a plain manual kick)
+     * @param automatic true when the mod acted on its own rather than a host click
+     * @param urgent    jump the queue (used for the competitive-ban queue refusal)
      */
-    public void remove(String name, String reason, boolean urgent) {
+    public void remove(String name, String reason, boolean automatic, boolean urgent) {
         if (!ChatEvents.validName(name) || isSelf(name)) return;
         String[] pair = {"/block add " + name, "/p kick " + name};
         if (urgent) commands.addUrgent(pair);
         else commands.add(pair);
         Member m = party.get(name);
         if (m != null) m.status = Status.REMOVED;
-        if (!party.wasBlocked(name)) party.recordBlocked(name, reason);
+        history.record(name, reason, automatic ? "" : selfName(), System.currentTimeMillis());
         String shown = m != null ? StatFormat.rankedName(m.stats, m.name) : EnumChatFormatting.WHITE + name;
-        party.log(EnumChatFormatting.RED + "Blocking + kicking " + shown + EnumChatFormatting.GRAY + " (" + reason + EnumChatFormatting.GRAY + ")");
+        party.log(EnumChatFormatting.RED + "Removed " + shown + EnumChatFormatting.GRAY + " - " + describe(history.get(name)), name);
     }
 
-    /** "Removed by <you>" with your name in gold, for the log and blocked list. */
-    public String removedBy() {
-        Minecraft mc = Minecraft.getMinecraft();
-        String self = mc.thePlayer == null ? "you" : mc.thePlayer.getName();
-        return EnumChatFormatting.GRAY + "Removed by " + EnumChatFormatting.GOLD + self + EnumChatFormatting.GRAY;
+    /** "No rank - Removed by §6Louis" / "Cannot play competitive games - Auto-removed". */
+    public static String describe(BlockHistory.Entry e) {
+        if (e == null) return "";
+        String who = e.automatic() ? EnumChatFormatting.GRAY + "Auto-removed"
+                : EnumChatFormatting.GRAY + "Removed by " + EnumChatFormatting.GOLD + e.by + EnumChatFormatting.GRAY;
+        return e.reason.isEmpty() ? who : EnumChatFormatting.GRAY + e.reason + " - " + who;
+    }
+
+    /** Reverses a removal: cancels unsent commands, otherwise unblocks and re-invites. */
+    public void undo(String name) {
+        boolean blockPending = commands.cancel("/block add " + name);
+        boolean kickPending = commands.cancel("/p kick " + name);
+        if (!blockPending) commands.add("/block remove " + name);
+        if (!kickPending) commands.add("/p invite " + name);
+        history.remove(name);
+        Member m = party.get(name);
+        if (m != null && kickPending) {
+            m.status = Status.DISMISSED;
+        }
+        party.log(EnumChatFormatting.GREEN + "Undid removal of " + name + (kickPending ? "" : " - re-invited"));
     }
 
     public void dismiss(String name) {
@@ -246,22 +380,22 @@ public final class PartyRuntime {
             return;
         }
         m.status = Status.DISMISSED;
-        party.log(name + " dismissed - staying in party");
+        party.log(name + " kept in party");
     }
 
     public void removeAllFlagged() {
         List<Member> queue = new ArrayList<>(party.toReview());
-        for (Member m : queue) remove(m.name, String.join(", ", m.reasons) + " - " + removedBy(), false);
-        if (!queue.isEmpty()) party.log(EnumChatFormatting.RED + "Kicking all " + queue.size() + " flagged players");
+        for (Member m : queue) remove(m.name, String.join(", ", m.reasons), false, false);
     }
 
     public void trust(String name) {
         if (!ChatEvents.validName(name)) return;
         trusted.add(name);
+        PartyMod.config.syncTrustedText(trusted.all());
         Member m = party.get(name);
         if (m != null && m.status != Status.REMOVED) {
             m.status = Status.TRUSTED;
-            m.reasons.clear();
+            m.setFlags(new ArrayList<>());
         }
         party.log(EnumChatFormatting.AQUA + name + EnumChatFormatting.GRAY + " trusted - never flagged again");
     }
@@ -271,28 +405,40 @@ public final class PartyRuntime {
             chat(name + " is not on your trusted list.");
             return;
         }
+        PartyMod.config.syncTrustedText(trusted.all());
         party.log(name + " removed from trusted list");
-        Member m = party.get(name);
-        if (m != null) recheck(name);
+        if (party.get(name) != null) recheck(name);
     }
 
     public void unblock(String name) {
         if (!ChatEvents.validName(name)) return;
         commands.add("/block remove " + name);
-        party.unrecordBlocked(name);
-        party.log(EnumChatFormatting.GREEN + "Unblocking " + name);
+        history.remove(name);
+        party.log(EnumChatFormatting.GREEN + "Unblocked " + name);
+    }
+
+    public void clearHistory() {
+        int n = history.size();
+        history.clear();
+        chat("Forgot " + n + " removed player(s). They stay blocked on Hypixel.");
     }
 
     public void removeNext() {
         List<Member> queue = party.toReview();
         if (queue.isEmpty()) chat("Nobody to review.");
-        else remove(queue.get(0).name, String.join(", ", queue.get(0).reasons) + " - " + removedBy(), false);
+        else remove(queue.get(0).name, String.join(", ", queue.get(0).reasons), false, false);
     }
 
     public void dismissNext() {
         List<Member> queue = party.toReview();
         if (queue.isEmpty()) chat("Nobody to review.");
         else dismiss(queue.get(0).name);
+    }
+
+    public void trustNext() {
+        List<Member> queue = party.toReview();
+        if (queue.isEmpty()) chat("Nobody to review.");
+        else trust(queue.get(0).name);
     }
 
     public void syncParty() {
@@ -302,6 +448,46 @@ public final class PartyRuntime {
         }
         commands.add("/p list");
         party.log("Syncing party list");
+    }
+
+    // ---------------------------------------------------------------- queue guard
+
+    /**
+     * Called by the client-side /play command.
+     *
+     * @return true if the queue was let through
+     */
+    public boolean tryQueue(String args) {
+        String mode = args.replaceAll("[^A-Za-z0-9_ ]", "").trim();
+        List<Member> waiting = party.toReview();
+        if (!PartyMod.config.queueGuard || waiting.isEmpty() || System.currentTimeMillis() < queueBypassUntil) {
+            sendNow("/play " + mode);
+            return true;
+        }
+        IChatComponent line = new ChatComponentText(PREFIX + EnumChatFormatting.GOLD + waiting.size()
+                + " player(s) still to review. ");
+        line.appendSibling(button("[Kick them + queue]", EnumChatFormatting.RED, "/mwp queue kick " + mode,
+                "Block + kick everyone waiting for review, then /play " + mode));
+        line.appendSibling(new ChatComponentText(" "));
+        line.appendSibling(button("[Queue anyway]", EnumChatFormatting.GREEN, "/mwp queue force " + mode,
+                "/play " + mode + " with them still in the party"));
+        chat(line);
+        return false;
+    }
+
+    public void queueAfterKicks(String mode) {
+        removeAllFlagged();
+        commands.add("/play " + mode.replaceAll("[^A-Za-z0-9_ ]", "").trim());
+    }
+
+    public void queueAnyway(String mode) {
+        queueBypassUntil = System.currentTimeMillis() + 30_000L;
+        sendNow("/play " + mode.replaceAll("[^A-Za-z0-9_ ]", "").trim());
+    }
+
+    private static void sendNow(String command) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.thePlayer != null) mc.thePlayer.sendChatMessage(command.trim());
     }
 
     // ---------------------------------------------------------------- output

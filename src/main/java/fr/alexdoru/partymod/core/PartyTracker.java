@@ -12,8 +12,8 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Everything the overlays show: current members, the review queue, blocked players
- * and a timestamped event log. Owned by the client thread.
+ * Live party state the overlays show: current members, the review queue and a
+ * timestamped event log. Owned by the client thread.
  */
 public final class PartyTracker {
 
@@ -25,6 +25,8 @@ public final class PartyTracker {
         public final boolean joinedLive;
         public Status status = Status.CHECKING;
         public PlayerStats stats;
+        public final List<Flagger.Flag> flags = new ArrayList<>();
+        /** Reason texts, kept in step with {@link #flags}. */
         public final List<String> reasons = new ArrayList<>();
         public String error = "";
         public final long joinedAt = System.currentTimeMillis();
@@ -34,26 +36,45 @@ public final class PartyTracker {
             this.joinedLive = joinedLive;
         }
 
+        public void setFlags(List<Flagger.Flag> newFlags) {
+            flags.clear();
+            reasons.clear();
+            for (Flagger.Flag f : newFlags) {
+                flags.add(f);
+                reasons.add(f.text);
+            }
+        }
+
+        public boolean strong() {
+            return Flagger.anyStrong(flags);
+        }
+
         /** Joined live within the last minute - highlighted so the host spots new arrivals. */
         public boolean isNew(long now) {
             return joinedLive && now - joinedAt < 60_000L;
         }
     }
 
-    public static final class Blocked {
-        public final String name, reason, time;
+    public static final class LogEntry {
+        public final String text, time;
+        public final long at = System.currentTimeMillis();
+        /** Player whose removal this entry can undo, or null. */
+        public final String undoName;
 
-        Blocked(String name, String reason, String time) {
-            this.name = name;
-            this.reason = reason;
+        LogEntry(String text, String time, String undoName) {
+            this.text = text;
             this.time = time;
+            this.undoName = undoName;
+        }
+
+        public boolean undoable(long now) {
+            return undoName != null && now - at < 10_000L;
         }
     }
 
     private static final int LOG_LIMIT = 200;
     private final Map<String, Member> members = new LinkedHashMap<>();
-    private final Deque<String> log = new ArrayDeque<>();
-    private final Deque<Blocked> blocked = new ArrayDeque<>();
+    private final Deque<LogEntry> log = new ArrayDeque<>();
     private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm", Locale.ROOT);
 
     private static String key(String name) {
@@ -80,66 +101,42 @@ public final class PartyTracker {
         return members.values();
     }
 
-    /** Members awaiting a decision, oldest first. */
+    /** Members awaiting a decision: strong flags first, then oldest first. */
     public List<Member> toReview() {
-        List<Member> list = new ArrayList<>();
-        for (Member m : members.values()) if (m.status == Status.FLAGGED) list.add(m);
-        return list;
+        List<Member> strong = new ArrayList<>(), weak = new ArrayList<>();
+        for (Member m : members.values()) {
+            if (m.status == Status.FLAGGED) (m.strong() ? strong : weak).add(m);
+        }
+        strong.addAll(weak);
+        return strong;
     }
 
     public void clearMembers() {
         members.clear();
     }
 
-    public void log(String line) {
-        log.addFirst("[" + clock.format(new Date()) + "] " + line);
+    public LogEntry log(String line) {
+        return log(line, null);
+    }
+
+    public LogEntry log(String line, String undoName) {
+        LogEntry e = new LogEntry(line, clock.format(new Date()), undoName);
+        log.addFirst(e);
         while (log.size() > LOG_LIMIT) log.removeLast();
+        return e;
     }
 
     /** Newest first. */
-    public List<String> log(int limit) {
-        List<String> out = new ArrayList<>();
-        for (String line : log) {
+    public List<LogEntry> log(int limit) {
+        List<LogEntry> out = new ArrayList<>();
+        for (LogEntry e : log) {
             if (out.size() >= limit) break;
-            out.add(line);
+            out.add(e);
         }
         return out;
-    }
-
-    public void recordBlocked(String name, String reason) {
-        blocked.addFirst(new Blocked(name, reason, clock.format(new Date())));
-        while (blocked.size() > LOG_LIMIT) blocked.removeLast();
-    }
-
-    public boolean wasBlocked(String name) {
-        for (Blocked b : blocked) if (b.name.equalsIgnoreCase(name)) return true;
-        return false;
-    }
-
-    /** Newest first. */
-    public List<Blocked> blocked(int limit) {
-        List<Blocked> out = new ArrayList<>();
-        for (Blocked b : blocked) {
-            if (out.size() >= limit) break;
-            out.add(b);
-        }
-        return out;
-    }
-
-    public boolean unrecordBlocked(String name) {
-        return blocked.removeIf(b -> b.name.equalsIgnoreCase(name));
     }
 
     public void clearLog() {
         log.clear();
-    }
-
-    public void clearBlocked() {
-        blocked.clear();
-    }
-
-    public void clearLogs() {
-        clearLog();
-        clearBlocked();
     }
 }
