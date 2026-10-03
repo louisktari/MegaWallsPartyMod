@@ -40,6 +40,10 @@ and can be removed with one click or one key. Removing a player sends `/block ad
   are logged. Paused during matches; turn it off or change the interval under OneConfig -> Actions.
 - **API counter.** The Party overview shows how many Hypixel requests you have left in the current
   window (e.g. `API 212/300 left | resets in 3m`), green, yellow or red. With 5 or fewer left, checks
+- **Join bursts.** Stat checks run one at a time, spaced by *Lookups per minute* (default 60, so one
+  a second). If 50 people join in 5 seconds they queue and clear in about 50 seconds; each waiting
+  card shows `queued #12` with an estimate, and the overview shows how many are left. Anyone who
+  leaves before their turn is skipped, so they cost no requests.
   wait for the window to reset instead of hitting the rate limit.
 - **Party summary.** When the party ends you get a summary in chat and on the Party overview: running
   time, peak size, total joins and peak join rate, leaves, and how many players were flagged,

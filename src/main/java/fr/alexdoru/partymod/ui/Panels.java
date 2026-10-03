@@ -425,12 +425,17 @@ public final class Panels {
                 : m.role == fr.alexdoru.partymod.core.ChatEvents.Role.MODERATOR ? "\u00a72[Mod] " : "";
         card.title = (m.isNew(now) ? "\u00a7d\u00a7lNEW " : "") + role + m.shown();
         switch (m.status) {
-            case CHECKING:
-                card.badge = StatFormat.YELLOW + (m.retryAt > now ? "retrying..." : "checking...");
+            case CHECKING: {
+                int pos = m.retryAt > now ? 0 : PartyMod.runtime.queuePosition(m.name);
+                card.badge = StatFormat.YELLOW + (m.retryAt > now ? "retrying..." : pos > 1 ? "queued #" + pos : "checking...");
                 if (m.retryAt > now) {
                     card.lines.add(StatFormat.YELLOW + "Hypixel rate limit - retrying in " + ((m.retryAt - now + 999) / 1000) + "s");
+                } else if (pos > 1) {
+                    card.lines.add(StatFormat.GRAY + "Waiting to be checked - about "
+                            + ((PartyMod.runtime.queueWaitMs(pos) + 999) / 1000) + "s");
                 }
                 break;
+            }
             case UNAVAILABLE:
                 card.badge = StatFormat.YELLOW + "unchecked";
                 card.lines.add(StatFormat.YELLOW + m.error);
@@ -604,6 +609,11 @@ public final class Panels {
         c.lines.add(line);
         String api = apiLine(rt.apiBudget(), System.currentTimeMillis());
         if (api != null) c.lines.add(api);
+        int queued = rt.queueSize();
+        if (queued > 1) {
+            c.lines.add(StatFormat.GRAY + "Checking " + StatFormat.YELLOW + queued + StatFormat.GRAY + " players - about "
+                    + StatFormat.WHITE + ((rt.queueWaitMs(queued) + 999) / 1000) + "s" + StatFormat.GRAY + " to clear");
+        }
         if (size <= 1) c.lines.add(StatFormat.GRAY + "Just you so far - waiting for joins");
         c.tooltip = java.util.Arrays.asList(StatFormat.LIGHT_PURPLE_SAFE + "Party session",
                 StatFormat.GRAY + (rt.startApprox() ? "Timer started when the mod first saw this party" : "Timer started when you created the party"),

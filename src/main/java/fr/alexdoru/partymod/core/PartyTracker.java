@@ -87,6 +87,8 @@ public final class PartyTracker {
 
     private static final int LOG_LIMIT = 200;
     private final Map<String, Member> members = new LinkedHashMap<>();
+    /** Lower-cased names currently in the party, safe to read from the API thread. */
+    private final java.util.Set<String> present = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Deque<LogEntry> log = new ArrayDeque<>();
     private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm", Locale.ROOT);
 
@@ -99,6 +101,7 @@ public final class PartyTracker {
         if (members.containsKey(key(name))) return null;
         Member m = new Member(name, joinedLive);
         members.put(key(name), m);
+        present.add(key(name));
         return m;
     }
 
@@ -107,7 +110,13 @@ public final class PartyTracker {
     }
 
     public Member remove(String name) {
+        present.remove(key(name));
         return members.remove(key(name));
+    }
+
+    /** Thread-safe: is this player still in the party? Lets queued lookups skip people who left. */
+    public boolean isPresent(String name) {
+        return name != null && present.contains(key(name));
     }
 
     public Collection<Member> members() {
@@ -126,6 +135,7 @@ public final class PartyTracker {
 
     public void clearMembers() {
         members.clear();
+        present.clear();
     }
 
     public LogEntry log(String line) {

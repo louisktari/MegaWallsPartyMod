@@ -553,6 +553,19 @@ public final class PartyRuntime {
         return selfName().equalsIgnoreCase(name);
     }
 
+    /** 1-based place in the stat-check queue (1 = being checked now), or 0. */
+    public int queuePosition(String name) {
+        return api.queuePosition(name);
+    }
+
+    public long queueWaitMs(int position) {
+        return api.queueWaitMs(position);
+    }
+
+    public int queueSize() {
+        return api.queueSize();
+    }
+
     /** Current party leader's name, or "" until a /p list or role message has told us. */
     public String leader() {
         return leader;
@@ -586,12 +599,14 @@ public final class PartyRuntime {
         m.status = trusted.isTrusted(m.name) ? Status.TRUSTED : Status.CHECKING;
         if (m.status == Status.TRUSTED) m.setFlags(new ArrayList<>());
         api.lookup(m.name, tabUuid(m.name), PartyMod.config.hypixelApiKey, (int) PartyMod.config.cacheMinutes,
-                (int) PartyMod.config.requestsPerMinute,
-                result -> Minecraft.getMinecraft().addScheduledTask(() -> onResult(m, result)));
+                (int) PartyMod.config.requestsPerMinute, () -> party.isPresent(m.name),
+                result -> Minecraft.getMinecraft().addScheduledTask(() -> onResult(m.name, result)));
     }
 
-    private void onResult(Member m, HypixelClient.Result result) {
-        if (party.get(m.name) != m) return; // left or party changed meanwhile
+    private void onResult(String name, HypixelClient.Result result) {
+        // Resolve by name: if they left and rejoined while queued, the result belongs to the new card.
+        Member m = party.get(name);
+        if (m == null) return; // left meanwhile
         if (result.retrying) {
             if (m.status != Status.TRUSTED) m.status = Status.CHECKING;
             if (m.retryAt == 0) party.log(EnumChatFormatting.YELLOW + "Rate limited checking " + m.shown()

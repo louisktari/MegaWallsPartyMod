@@ -12,7 +12,6 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -79,7 +78,9 @@ public final class HypixelClient {
         return t;
     });
     private final Map<String, Cached> cache = new LinkedHashMap<>();
-    private final Set<String> inFlight = new HashSet<>();
+    /** Lookups waiting or running, in queue order (the first one is being fetched). */
+    private final Set<String> inFlight = new java.util.LinkedHashSet<>();
+    private long spacingMs = 1000;
     private final String userAgent;
     private long nextRequestAt;
     /** Hypixel's remaining request budget, from the RateLimit-* headers on each reply. */
@@ -99,6 +100,17 @@ public final class HypixelClient {
      */
     public synchronized boolean lookup(String name, String knownUuid, String apiKey, int cacheMinutes,
                                        int requestsPerMinute, Consumer<Result> callback) {
+        return lookup(name, knownUuid, apiKey, cacheMinutes, requestsPerMinute, () -> true, callback);
+    }
+
+    /**
+     * As above, but {@code stillWanted} is asked again when the lookup reaches the front of
+     * the queue: if it says no (the player left while waiting), no requests are spent on them.
+     * It runs on the API thread, so it must be thread-safe.
+     */
+    public synchronized boolean lookup(String name, String knownUuid, String apiKey, int cacheMinutes,
+                                       int requestsPerMinute, java.util.function.BooleanSupplier stillWanted,
+                                       Consumer<Result> callback) {
         String key = name.toLowerCase(Locale.ROOT);
         Cached hit = cache.get(key);
         if (hit != null && System.currentTimeMillis() - hit.at < cacheMinutes * 60_000L) {
@@ -107,7 +119,14 @@ public final class HypixelClient {
         }
         if (!inFlight.add(key)) return false;
         long spacing = 60_000L / Math.max(1, requestsPerMinute);
+        spacingMs = spacing;
         worker.submit(() -> {
+            if (!stillWanted.getAsBoolean()) {
+                synchronized (this) {
+                    inFlight.remove(key);
+                }
+                return;
+            }
             Result result = fetch(name, knownUuid, apiKey, spacing);
             for (int attempt = 1; result.rateLimited && attempt <= MAX_RETRIES && !Thread.currentThread().isInterrupted(); attempt++) {
                 long at;
@@ -137,6 +156,27 @@ public final class HypixelClient {
         } catch (RuntimeException ignored) {
             // A UI callback failure must not kill the worker.
         }
+    }
+
+    /** 1-based place in the lookup queue (1 = being checked now), or 0 if not queued. */
+    public synchronized int queuePosition(String name) {
+        String key = name.toLowerCase(Locale.ROOT);
+        int i = 1;
+        for (String k : inFlight) {
+            if (k.equals(key)) return i;
+            i++;
+        }
+        return 0;
+    }
+
+    /** Lookups waiting or running. */
+    public synchronized int queueSize() {
+        return inFlight.size();
+    }
+
+    /** Rough wait before a queued lookup starts, from its place and the request spacing. */
+    public synchronized long queueWaitMs(int position) {
+        return position <= 1 ? 0 : (position - 1) * spacingMs;
     }
 
     public synchronized void forget(String name) {

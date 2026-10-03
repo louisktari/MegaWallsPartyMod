@@ -168,4 +168,34 @@ public class HostFeaturesTest {
         assertFalse(MatchDetector.inMegaWallsMatch("MEGA WALLS", Arrays.asList("Coins: 120", "Class: Squid")));
         assertFalse(MatchDetector.inMegaWallsMatch("BED WARS", Arrays.asList("Walls Fall")));
     }
+
+    @Test
+    public void presenceTracksJoinsLeavesAndDisband() {
+        PartyTracker party = new PartyTracker();
+        party.add("Alpha", true);
+        party.add("Beta", true);
+        assertTrue(party.isPresent("alpha"));
+        party.remove("ALPHA");
+        assertFalse(party.isPresent("Alpha"));
+        assertTrue(party.isPresent("Beta"));
+        party.clearMembers();
+        assertFalse(party.isPresent("Beta"));
+        assertFalse(party.isPresent(null));
+    }
+
+    @Test
+    public void queuedLookupForPlayerWhoLeftSpendsNoRequests() throws Exception {
+        fr.alexdoru.partymod.data.HypixelClient api = new fr.alexdoru.partymod.data.HypixelClient("test");
+        java.util.concurrent.CountDownLatch skipped = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean called = new java.util.concurrent.atomic.AtomicBoolean();
+        api.lookup("GoneAlready", null, "abcdefgh-1234", 0, 60, () -> {
+            skipped.countDown();
+            return false;
+        }, r -> called.set(true));
+        assertTrue(skipped.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        for (int i = 0; i < 50 && api.queueSize() > 0; i++) Thread.sleep(20);
+        assertEquals(0, api.queueSize());
+        assertFalse("no result is delivered for a skipped lookup", called.get());
+        api.shutdown();
+    }
 }
