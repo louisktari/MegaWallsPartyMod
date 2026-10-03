@@ -55,9 +55,23 @@ public final class ChatEvents {
 
     private ChatEvents() {}
 
+    /**
+     * Anything a player typed: lobby chat "[VIP] Name: hi", "Party > Name: hi", guild/officer/co-op,
+     * DMs "From Name: hi", and channel tags like "[SHOUT] Name: hi". These are never parsed as
+     * events, so a player can't fake a join, kick, transfer or competitive-ban line by typing it.
+     */
+    private static final Pattern PLAYER_CHAT = Pattern.compile(
+            "^(?:(?:Party|Guild|Officer|Co-op|Friend) > |From |To |\\[[^\\]]{1,24}\\] )*"
+                    + "(?:\\[[^\\]]{1,24}\\] )?[A-Za-z0-9_]{1,16}(?: \\[[^\\]]{1,24}\\])?: ");
+
+    public static boolean isPlayerChat(String text) {
+        return PLAYER_CHAT.matcher(text).find() && !MEMBER_LIST.matcher(text).matches();
+    }
+
     public static Event parse(String raw) {
         if (raw == null) return new Event(Type.NONE, "");
         String text = stripFormatting(raw).trim();
+        if (isPlayerChat(text)) return new Event(Type.NONE, "");
         Matcher m;
         if ((m = COMPETITIVE.matcher(text)).matches()) return new Event(Type.COMPETITIVE_BLOCK, m.group(1));
         if ((m = JOIN.matcher(text)).matches()) return new Event(Type.JOIN, m.group(1));

@@ -47,7 +47,13 @@ public final class PartyRuntime {
     private final HypixelClient api = new HypixelClient(PartyMod.version());
 
     private KeyStatus keyStatus = KeyStatus.UNKNOWN;
-    private boolean inMatch, onboarded;
+    private boolean inMatch, inHousing, onboarded;
+    /** Times of recent automatic removals; caps how fast the mod can act on its own. */
+    private final java.util.ArrayDeque<Long> autoRemovals = new java.util.ArrayDeque<>();
+    static final int AUTO_REMOVAL_LIMIT = 5;
+    static final long AUTO_REMOVAL_WINDOW = 60_000L;
+    /** Competitive-ban names waiting for /p list to confirm they're really in the party. */
+    private final java.util.Set<String> pendingCompetitive = new java.util.HashSet<>();
     private long queueBypassUntil;
     private int ticks;
 
@@ -198,6 +204,9 @@ public final class PartyRuntime {
                 });
         if (++ticks % 20 == 0) {
             inMatch = detectMatch();
+            boolean housing = detectHousing();
+            if (housing && !inHousing) party.logSystem("In Housing - automatic removals paused (house scripts can fake chat)");
+            inHousing = housing;
             dropStuckRemovals();
         }
         if (!onboarded && ticks > 100) {
@@ -208,6 +217,33 @@ public final class PartyRuntime {
                 chat(line);
             }
         }
+    }
+
+    private boolean detectHousing() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.theWorld == null) return false;
+        ScoreObjective objective = mc.theWorld.getScoreboard().getObjectiveInDisplaySlot(1);
+        return objective != null && MatchDetector.inHousing(EnumChatFormatting.getTextWithoutFormattingCodes(objective.getDisplayName()));
+    }
+
+    /**
+     * Gate for anything the mod does without a click. Refuses in Housing, for you or trusted
+     * players, for anyone not in your party, and beyond {@value #AUTO_REMOVAL_LIMIT} a minute.
+     */
+    private boolean mayAutoRemove(String name, String why) {
+        String reason = null;
+        if (isSelf(name) || trusted.isTrusted(name)) reason = "trusted";
+        else if (inHousing) reason = "in Housing";
+        else if (party.get(name) == null) reason = "not in your party";
+        else {
+            long now = System.currentTimeMillis();
+            while (!autoRemovals.isEmpty() && now - autoRemovals.peekFirst() > AUTO_REMOVAL_WINDOW) autoRemovals.pollFirst();
+            if (autoRemovals.size() >= AUTO_REMOVAL_LIMIT) reason = "too many automatic removals this minute";
+            else autoRemovals.addLast(now);
+        }
+        if (reason == null) return true;
+        party.logSystem("Did not auto-remove " + nameOf(name) + EnumChatFormatting.GRAY + " (" + why + ") - " + reason);
+        return false;
     }
 
     private boolean detectMatch() {
@@ -238,7 +274,16 @@ public final class PartyRuntime {
             case COMPETITIVE_BLOCK:
                 remember(e.value, ChatEvents.formattedName(event.message.getFormattedText(), e.value));
                 party.log(nameOf(e.value) + EnumChatFormatting.RED + " cannot play competitive games");
-                if (PartyMod.config.autoCompetitive) remove(e.value, "Cannot play competitive games", true, true);
+                if (PartyMod.config.autoCompetitive) {
+                    if (party.get(e.value) == null && !isSelf(e.value) && !trusted.isTrusted(e.value) && !inHousing) {
+                        // Not tracked (maybe joined before we were watching): confirm with Hypixel first.
+                        pendingCompetitive.add(e.value.toLowerCase(java.util.Locale.ROOT));
+                        commands.addUrgent("/p list");
+                        party.logSystem("Confirming " + nameOf(e.value) + EnumChatFormatting.GRAY + " is in your party before removing");
+                    } else if (mayAutoRemove(e.value, "competitive ban")) {
+                        remove(e.value, "Cannot play competitive games", true, true);
+                    }
+                }
                 break;
             case JOIN:
                 onJoin(e.value, true, ChatEvents.formattedName(event.message.getFormattedText(), e.value));
@@ -260,6 +305,10 @@ public final class PartyRuntime {
                     onJoin(name, false, ChatEvents.formattedName(formatted, name));
                     Member listed = party.get(name);
                     if (listed != null) listed.role = e.role;
+                    if (listed != null && pendingCompetitive.remove(name.toLowerCase(java.util.Locale.ROOT))
+                            && mayAutoRemove(name, "competitive ban")) {
+                        remove(name, "Cannot play competitive games", true, true);
+                    }
                     if (syncSeen != null) syncSeen.add(name.toLowerCase(java.util.Locale.ROOT));
                 }
                 if (syncSeen != null && syncSeen.size() >= syncExpected) finishSync();
@@ -326,6 +375,10 @@ public final class PartyRuntime {
             party.remove(m.name);
             party.log(m.shown() + EnumChatFormatting.GRAY + " is no longer in the party");
         }
+        for (String name : pendingCompetitive) {
+            party.logSystem("Ignored competitive-ban message for " + nameOf(name) + EnumChatFormatting.GRAY + " - not in your party");
+        }
+        pendingCompetitive.clear();
         syncSeen = null;
     }
 
@@ -433,7 +486,7 @@ public final class PartyRuntime {
         String summary = String.join(", ", m.reasons);
         party.log(m.shown() + EnumChatFormatting.GRAY + " flagged: "
                 + (m.strong() ? EnumChatFormatting.RED : EnumChatFormatting.GOLD) + summary);
-        if (PartyMod.config.autoRemoveFlagged && m.joinedLive && m.strong()) {
+        if (PartyMod.config.autoRemoveFlagged && m.joinedLive && m.strong() && mayAutoRemove(m.name, "strong flag")) {
             remove(m.name, summary, true, false);
             return;
         }

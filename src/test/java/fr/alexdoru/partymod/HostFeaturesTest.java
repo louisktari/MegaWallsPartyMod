@@ -154,6 +154,14 @@ public class HostFeaturesTest {
     }
 
     @Test
+    public void housingDetection() {
+        assertTrue(MatchDetector.inHousing("HOUSING"));
+        assertTrue(MatchDetector.inHousing("Evil's House - HOUSING"));
+        assertFalse(MatchDetector.inHousing("MEGA WALLS"));
+        assertFalse(MatchDetector.inHousing(null));
+    }
+
+    @Test
     public void matchDetection() {
         assertTrue(MatchDetector.inMegaWallsMatch("MEGA WALLS", Arrays.asList("Walls Fall: 05:12", "Kills: 0")));
         assertTrue(MatchDetector.inMegaWallsMatch("MEGA WALLS", Arrays.asList("[R] Wither: 600")));

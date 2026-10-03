@@ -8,6 +8,13 @@ public final class MatchDetector {
     private MatchDetector() {}
 
     /**
+     * Housing owners can script chat messages with any text, so automatic actions are paused there.
+     */
+    public static boolean inHousing(String title) {
+        return title != null && title.toUpperCase(Locale.ROOT).contains("HOUSING");
+    }
+
+    /**
      * @param title sidebar title (formatting already stripped)
      * @param lines sidebar lines (formatting already stripped)
      */

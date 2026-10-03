@@ -74,6 +74,20 @@ While you play the panels only display, and during a Mega Walls match they shrin
    [developer.hypixel.net](https://developer.hypixel.net) and press **Test key**. `/mwp setkey <key>` also works.
 3. Join a party, press **P**, and drag the panels where you want them.
 
+## Spoof protection
+
+Party members can't trigger the mod by typing server messages into chat:
+
+- **Player chat is never parsed.** Lobby chat, `Party >`, `Guild >`, `Officer >`, `Co-op >`, DMs (`From` / `To`) and channel tags like `[SHOUT]` are all rejected. Every pattern is also anchored to the whole message.
+- **Automatic removals have guards.** Before blocking + kicking without a click, the mod checks that:
+  - the player is actually in your party (a competitive-ban line for someone the mod isn't tracking triggers a `/p list` check first)
+  - the player isn't you or someone you trust
+  - you aren't in **Housing**, where house scripts can print any text
+  - no more than 5 automatic removals have happened in the last minute
+
+  Every refusal is logged with a `[SYSTEM]` line explaining why.
+- **Everything else is display-only.** Joins, leaves, roles and transfers only change what the panels show. They never send commands, and **Sync** corrects the list from Hypixel's own `/p list`.
+
 ## Settings (OneConfig)
 
 | Page | What's there |

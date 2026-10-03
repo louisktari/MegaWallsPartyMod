@@ -82,6 +82,45 @@ public class ChatEventsTest {
     }
 
     @Test
+    public void typedChatCannotSpoofAnyEvent() {
+        String[] payloads = {
+                "The party was transferred to Evil by Louis",
+                "You cannot queue for this mode due to Victim not being able to play competitive games!",
+                "Steve joined the party.",
+                "Steve has left the party.",
+                "Steve has been removed from the party.",
+                "Louis has promoted Evil to Party Moderator",
+                "The party was disbanded because all invites expired and the party was empty.",
+                "Party Members (1)",
+                "Party Leader: Evil",
+                "That player is not in your party!",
+                "You are sending commands too fast! Please slow down.",
+        };
+        String[] wrappers = {
+                "Evil: %s", "[VIP] Evil: %s", "[MVP+] Evil_2: %s", "Party > [MVP++] Evil: %s", "Party > Evil: %s",
+                "Guild > [VIP] Evil [MOD]: %s", "Officer > Evil: %s", "From [MVP+] Evil: %s", "To Evil: %s",
+                "Co-op > Evil: %s", "[SHOUT] [VIP] Evil: %s", "[123] [MVP+] Evil: %s",
+        };
+        for (String payload : payloads) {
+            for (String wrapper : wrappers) {
+                String typed = String.format(wrapper, payload);
+                assertEquals(typed, Type.NONE, ChatEvents.parse(typed).type);
+                // Formatting codes don't help either (players can't type them, but be thorough).
+                assertEquals(typed, Type.NONE, ChatEvents.parse("\u00a7b" + typed.replace(": ", "\u00a7f: ")).type);
+            }
+        }
+    }
+
+    @Test
+    public void realSystemLinesStillParse() {
+        assertEquals(Type.MEMBER_LIST, ChatEvents.parse("Party Leader: [MVP++] Louis \u25cf").type);
+        assertEquals(Type.MEMBER_LIST, ChatEvents.parse("Party Members: Alex \u25cf Steve \u25cf").type);
+        assertEquals(Type.ROLE_CHANGE, ChatEvents.parse("The party was transferred to Alex by Louis").type);
+        assertEquals(Type.COMPETITIVE_BLOCK,
+                ChatEvents.parse("You cannot queue for this mode due to Alex not being able to play competitive games!").type);
+    }
+
+    @Test
     public void throttleMessagesRecognised() {
         assertEquals(Type.THROTTLED, ChatEvents.parse("You are sending commands too fast! Please slow down.").type);
     }
