@@ -112,7 +112,7 @@ public final class PartyCommand extends CommandBase {
         return false;
     }
 
-    private static final String DIVIDER = "\u00a78\u00a7m                                        \u00a7r";
+    static final String DIVIDER = "\u00a78\u00a7m                                        \u00a7r";
 
     private static void help() {
         PartyRuntime.chat("\u00a7dCommands \u00a78(\u00a77hover a command for details\u00a78) \u00a77v" + PartyMod.version());

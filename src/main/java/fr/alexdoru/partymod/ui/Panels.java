@@ -495,6 +495,13 @@ public final class Panels {
             m.cards.add(warn);
         }
         if (rt.inParty()) m.cards.add(sessionCard(rt));
+        else if (rt.lastSummary() != null) {
+            Card last = new Card();
+            last.title = StatFormat.LIGHT_PURPLE_SAFE + "Last party";
+            List<String> lines = rt.lastSummary();
+            last.lines.addAll(lines);
+            m.cards.add(last);
+        }
         // Newest first so the player who just joined is always at the top.
         List<Member> list = new ArrayList<>(party.members());
         Collections.reverse(list);
@@ -523,9 +530,7 @@ public final class Panels {
     /** Running time, size vs cap, and how fast people are joining. */
     private static Card sessionCard(PartyRuntime rt) {
         Card c = new Card();
-        long secs = Math.max(0, (System.currentTimeMillis() - rt.partyStartedAt()) / 1000);
-        String clock = secs >= 3600 ? String.format("%d:%02d:%02d", secs / 3600, secs / 60 % 60, secs % 60)
-                : String.format("%d:%02d", secs / 60, secs % 60);
+        String clock = fr.alexdoru.partymod.core.SessionStats.clock(System.currentTimeMillis() - rt.partyStartedAt());
         int size = rt.partySize(), cap = rt.partyCap();
         String fill = cap <= 0 ? StatFormat.WHITE + size
                 : (size >= cap ? StatFormat.RED : size >= cap * 0.9 ? StatFormat.YELLOW : StatFormat.GREEN) + size + StatFormat.GRAY + "/" + cap;
@@ -539,11 +544,30 @@ public final class Panels {
             line += StatFormat.DARK_GRAY + " | " + StatFormat.GRAY + "Full in ~" + StatFormat.WHITE + (etaMin >= 60 ? etaMin / 60 + "h" + etaMin % 60 + "m" : etaMin + "m");
         }
         c.lines.add(line);
+        String api = apiLine(rt.apiBudget(), System.currentTimeMillis());
+        if (api != null) c.lines.add(api);
         if (size <= 1) c.lines.add(StatFormat.GRAY + "Just you so far - waiting for joins");
         c.tooltip = java.util.Arrays.asList(StatFormat.LIGHT_PURPLE_SAFE + "Party session",
                 StatFormat.GRAY + (rt.startApprox() ? "Timer started when the mod first saw this party" : "Timer started when you created the party"),
-                StatFormat.GRAY + "Join rate counts joins in the last minute");
+                StatFormat.GRAY + "Join rate counts joins in the last minute",
+                StatFormat.GRAY + "API = Hypixel requests left in the current window. Below "
+                        + fr.alexdoru.partymod.data.ApiBudget.RESERVE + ", checks wait for the reset.");
         return c;
+    }
+
+    /** "API 212/300 left | resets in 3m", coloured by how much is left; null until Hypixel has replied. */
+    static String apiLine(fr.alexdoru.partymod.data.ApiBudget budget, long now) {
+        if (!budget.known()) return null;
+        int left = budget.remaining(now), limit = budget.limit();
+        long resetIn = Math.max(0, budget.resetAt() - now);
+        String colour = left > limit * 0.3 ? StatFormat.GREEN : left > limit * 0.1 ? StatFormat.YELLOW : StatFormat.RED;
+        String line = StatFormat.GRAY + "API " + colour + left + StatFormat.GRAY + "/" + limit + " left";
+        if (resetIn > 0 && left < limit) {
+            String when = resetIn >= 60_000L ? (resetIn + 59_999L) / 60_000L + "m" : (resetIn + 999L) / 1000L + "s";
+            line += StatFormat.DARK_GRAY + " | " + (budget.waitMs(now) > 0 ? StatFormat.RED + "checks paused, " : StatFormat.GRAY)
+                    + "resets in " + when;
+        }
+        return line;
     }
 
     private Model log(PartyTracker party) {

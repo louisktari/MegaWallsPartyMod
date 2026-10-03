@@ -135,6 +135,16 @@ public final class PartyConfig extends Config {
             category = "Actions", subcategory = "Prompts")
     public boolean chatPrompt = true;
 
+    @Switch(name = "Auto-sync the party list",
+            description = "Quietly runs /p list every few minutes and as soon as the party fills, to catch leaves the mod missed. "
+                    + "Its chat output is hidden; only changes are logged. Paused during matches. Default: on",
+            category = "Actions", subcategory = "Auto-sync")
+    public boolean autoSync = true;
+
+    @Slider(name = "...every (minutes)", min = 1, max = 15, step = 1, description = "Default: 3",
+            category = "Actions", subcategory = "Auto-sync")
+    public float autoSyncMinutes = 3;
+
     @Switch(name = "Sound when a player is flagged", description = "Default: on", category = "Actions", subcategory = "Prompts")
     public boolean flagSound = true;
 
@@ -259,6 +269,7 @@ public final class PartyConfig extends Config {
         hideIf("lowFkd", () -> !flagLowStats);
         hideIf("highFkd", () -> !flagHighStats);
         hideIf("highWl", () -> !flagHighStats);
+        hideIf("autoSyncMinutes", () -> !autoSync);
     }
 
     /** First key of the overlay keybind, so the panel screen can close on the same key. */

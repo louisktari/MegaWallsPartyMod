@@ -7,7 +7,9 @@ import fr.alexdoru.partymod.core.MatchDetector;
 import fr.alexdoru.partymod.core.PartyTracker;
 import fr.alexdoru.partymod.core.PartyTracker.Member;
 import fr.alexdoru.partymod.core.PartyTracker.Status;
+import fr.alexdoru.partymod.core.SessionStats;
 import fr.alexdoru.partymod.core.StatFormat;
+import fr.alexdoru.partymod.data.ApiBudget;
 import fr.alexdoru.partymod.data.BlockHistory;
 import fr.alexdoru.partymod.data.HypixelClient;
 import fr.alexdoru.partymod.data.ListShare;
@@ -70,12 +72,15 @@ public final class PartyRuntime {
     private String leader = "";
     /** True while you're in a party, even if nobody else has joined yet. */
     private boolean inParty;
-    private long partyStartedAt;
-    /** True when the start time is only "since we noticed" (e.g. first seen via /p list). */
-    private boolean startApprox;
     private int partyCap;
-    private int totalJoins;
-    private final java.util.ArrayDeque<Long> recentJoins = new java.util.ArrayDeque<>();
+    /** Timer, joins, peaks and moderation counts for the current party. */
+    public final SessionStats session = new SessionStats();
+    /** Summary of the last party that ended, shown on the Party panel until a new one starts. */
+    private List<String> lastSummary;
+
+    // Auto-sync: a quiet /p list every few minutes and when the party fills up.
+    private long lastSyncAt, syncStartedAt, quietUntil;
+    private boolean quietPending, syncedAtCap;
 
     // ---------------------------------------------------------------- party session
 
@@ -94,34 +99,39 @@ public final class PartyRuntime {
     }
 
     public long partyStartedAt() {
-        return partyStartedAt;
+        return session.startedAt();
     }
 
     public boolean startApprox() {
-        return startApprox;
+        return session.approx();
     }
 
     public int totalJoins() {
-        return totalJoins;
+        return session.joins();
     }
 
-    /** Join-rate window: joins counted over the last minute, so the figure is simply "joins in the last 60s". */
-    static final long JOIN_RATE_WINDOW_MS = 60_000L;
-
-    /** Joins per minute over the last minute. */
+    /** Joins in the last minute. */
     public double joinRate() {
-        long now = System.currentTimeMillis();
-        while (!recentJoins.isEmpty() && now - recentJoins.peekFirst() > JOIN_RATE_WINDOW_MS) recentJoins.pollFirst();
-        return recentJoins.size() * 60_000.0 / JOIN_RATE_WINDOW_MS;
+        return session.rate(System.currentTimeMillis());
+    }
+
+    /** Hypixel's remaining request budget, from the last API reply. */
+    public ApiBudget apiBudget() {
+        return api.budget;
+    }
+
+    /** Summary of the last party that ended, or null. */
+    public List<String> lastSummary() {
+        return lastSummary;
     }
 
     private void startParty(boolean approx) {
         if (inParty) return;
         inParty = true;
-        partyStartedAt = System.currentTimeMillis();
-        startApprox = approx;
-        totalJoins = 0;
-        recentJoins.clear();
+        session.start(System.currentTimeMillis(), approx);
+        lastSummary = null;
+        lastSyncAt = System.currentTimeMillis();
+        syncedAtCap = false;
     }
     private long lastKickAt;
 
@@ -257,6 +267,10 @@ public final class PartyRuntime {
                         lastKick = command.substring(8);
                         lastKickAt = System.currentTimeMillis();
                     }
+                    if (command.equals("/p list") && quietPending) {
+                        quietPending = false;
+                        quietUntil = System.currentTimeMillis() + 3000L;
+                    }
                     Minecraft.getMinecraft().thePlayer.sendChatMessage(command);
                 });
         if (++ticks % 20 == 0) {
@@ -265,6 +279,7 @@ public final class PartyRuntime {
             if (housing && !inHousing) party.logSystem("In Housing - automatic removals paused (house scripts can fake chat)");
             inHousing = housing;
             dropStuckRemovals();
+            autoSyncTick();
         }
         if (!onboarded && ticks > 100) {
             onboarded = true;
@@ -274,6 +289,32 @@ public final class PartyRuntime {
                 chat(line);
             }
         }
+    }
+
+    /** Keeps the member list honest without the host pressing Sync. */
+    private void autoSyncTick() {
+        long now = System.currentTimeMillis();
+        if (syncSeen != null && now - syncStartedAt > 10_000L) syncSeen = null; // a /p list that never finished
+        if (!inParty || inMatch || PartyMod.config == null || !PartyMod.config.autoSync) return;
+        int size = partySize();
+        if (partyCap > 0 && size >= partyCap) {
+            if (!syncedAtCap) {
+                syncedAtCap = true;
+                quietSync();
+                return;
+            }
+        } else {
+            syncedAtCap = false;
+        }
+        if (commands.size() == 0 && now - lastSyncAt >= (long) (PartyMod.config.autoSyncMinutes * 60_000L)) quietSync();
+    }
+
+    /** Sends /p list and hides its output from chat; only changes it finds are logged. */
+    private void quietSync() {
+        if (syncSeen != null) return;
+        lastSyncAt = System.currentTimeMillis();
+        quietPending = true;
+        commands.add("/p list");
     }
 
     private boolean detectHousing() {
@@ -327,6 +368,10 @@ public final class PartyRuntime {
     public void onChat(ClientChatReceivedEvent event) {
         if (event.type == 2 || !active()) return; // ignore action bar
         ChatEvents.Event e = ChatEvents.parse(event.message.getUnformattedText());
+        if (System.currentTimeMillis() < quietUntil && (e.type == ChatEvents.Type.MEMBER_COUNT
+                || e.type == ChatEvents.Type.MEMBER_LIST || ChatEvents.isListFiller(event.message.getUnformattedText()))) {
+            event.setCanceled(true); // output of an automatic /p list
+        }
         switch (e.type) {
             case COMPETITIVE_BLOCK:
                 remember(e.value, ChatEvents.formattedName(event.message.getFormattedText(), e.value));
@@ -369,6 +414,8 @@ public final class PartyRuntime {
                 break;
             case MEMBER_COUNT:
                 startParty(true);
+                syncStartedAt = System.currentTimeMillis();
+                lastSyncAt = syncStartedAt;
                 syncSeen = new java.util.HashSet<>();
                 syncExpected = Integer.parseInt(e.value);
                 break;
@@ -415,6 +462,7 @@ public final class PartyRuntime {
                     endParty("You left the party");
                 } else {
                     Member gone = party.remove(e.value);
+                    if (gone != null && (e.type == ChatEvents.Type.LEAVE || gone.status != Status.REMOVED)) session.leave();
                     if (gone != null) party.log(gone.shown() + " " + (e.type == ChatEvents.Type.LEAVE
                             ? EnumChatFormatting.RED + "left" : EnumChatFormatting.RED + "was removed"));
                 }
@@ -470,12 +518,29 @@ public final class PartyRuntime {
 
     private void endParty(String reason) {
         boolean was = inParty || !party.members().isEmpty();
+        long now = System.currentTimeMillis();
+        boolean summarised = inParty && session.eventful(now);
+        if (summarised) {
+            lastSummary = session.summary(now, partyCap);
+            postSummary(lastSummary);
+        }
         leader = "";
         inParty = false;
         partyCap = 0;
-        partyStartedAt = 0;
+        quietPending = false;
+        syncSeen = null;
         party.clearMembers();
         if (was) party.logSystem(reason);
+        if (summarised) party.logSystem("Party summary: " + EnumChatFormatting.getTextWithoutFormattingCodes(
+                String.join(" | ", lastSummary)));
+    }
+
+    /** EDITH-style card in chat when a party ends. */
+    private static void postSummary(List<String> lines) {
+        chatRaw(PartyCommand.DIVIDER);
+        chat(EnumChatFormatting.LIGHT_PURPLE + "Party summary");
+        for (String line : lines) chatRaw("  " + line);
+        chatRaw(PartyCommand.DIVIDER);
     }
 
     private static String selfName() {
@@ -492,10 +557,8 @@ public final class PartyRuntime {
         startParty(!live);
         Member m = party.add(name, live);
         if (m == null) return;
-        if (live) {
-            totalJoins++;
-            recentJoins.addLast(System.currentTimeMillis());
-        }
+        if (live) session.join(System.currentTimeMillis());
+        session.size(partySize());
         if (display != null) m.display = display;
         remember(name, display);
         if (live) party.log(m.shown() + " " + EnumChatFormatting.GREEN + "joined");
@@ -564,6 +627,7 @@ public final class PartyRuntime {
         }
         if (m.status == Status.DISMISSED && !announce) return;
         m.status = Status.FLAGGED;
+        session.flagged(m.name);
         if (!announce) return;
         String summary = String.join(", ", m.reasons);
         party.log(m.shown() + EnumChatFormatting.GRAY + " flagged: "
@@ -681,6 +745,7 @@ public final class PartyRuntime {
             m.removedAt = System.currentTimeMillis();
         }
         history.record(name, reason, automatic ? "" : selfName(), System.currentTimeMillis());
+        session.removed(name, automatic);
         String shown = nameOf(name);
         party.log(EnumChatFormatting.RED + "Removed " + shown + EnumChatFormatting.GRAY + " - " + describe(history.get(name)), name);
     }
@@ -700,6 +765,7 @@ public final class PartyRuntime {
         if (!blockPending) commands.add("/block remove " + name);
         if (!kickPending) commands.add("/p invite " + name);
         history.remove(name);
+        session.unremoved(name);
         Member m = party.get(name);
         if (m != null && kickPending) {
             m.status = Status.DISMISSED;
@@ -727,6 +793,7 @@ public final class PartyRuntime {
             return;
         }
         m.status = Status.DISMISSED;
+        session.kept(name);
         party.log(nameOf(name) + EnumChatFormatting.GREEN + " kept in party");
     }
 
@@ -738,6 +805,7 @@ public final class PartyRuntime {
     public void trust(String name) {
         if (!ChatEvents.validName(name)) return;
         trusted.add(name);
+        session.trusted(name);
         PartyMod.config.syncTrustedText(trusted.all());
         Member m = party.get(name);
         if (m != null && m.status != Status.REMOVED) {
@@ -793,6 +861,8 @@ public final class PartyRuntime {
             chat("Join Hypixel first.");
             return;
         }
+        quietPending = false;
+        lastSyncAt = System.currentTimeMillis();
         commands.add("/p list");
         party.logSystem("Syncing party list");
     }

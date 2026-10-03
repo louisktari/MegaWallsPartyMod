@@ -101,6 +101,13 @@ public final class ChatEvents {
         return new Event(Type.NONE, "");
     }
 
+    /** Divider or blank line around a "/p list" reply (hidden during an automatic sync). */
+    public static boolean isListFiller(String raw) {
+        if (raw == null) return false;
+        String text = stripFormatting(raw).trim();
+        return text.isEmpty() || text.matches("[-\\u2500\\u25ac=]{5,}");
+    }
+
     /** Splits a "/p list" row such as "[MVP+] Alice ● Bob ●" into usernames. */
     public static java.util.List<String> names(String row) {
         java.util.List<String> result = new java.util.ArrayList<>();

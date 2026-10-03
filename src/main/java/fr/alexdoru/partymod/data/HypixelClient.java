@@ -82,6 +82,8 @@ public final class HypixelClient {
     private final Set<String> inFlight = new HashSet<>();
     private final String userAgent;
     private long nextRequestAt;
+    /** Hypixel's remaining request budget, from the RateLimit-* headers on each reply. */
+    public final ApiBudget budget = new ApiBudget();
 
     public HypixelClient(String version) {
         userAgent = "MegaWallsPartyMod/" + version;
@@ -164,6 +166,8 @@ public final class HypixelClient {
             if (uuid == null || !uuid.matches("[0-9a-fA-F]{32}")) {
                 return new Result(name, null, "Unknown Minecraft account");
             }
+            long hold = budget.waitMs(System.currentTimeMillis());
+            if (hold > 0) Thread.sleep(hold); // keep a few requests in hand until the window resets
             JsonObject response = get("https://api.hypixel.net/v2/player?uuid=" + uuid, key);
             if (response == null || !Boolean.TRUE.equals(bool(response, "success"))) {
                 return new Result(name, null, "Hypixel API returned no data");
@@ -221,12 +225,17 @@ public final class HypixelClient {
         if (hypixelKey != null) c.setRequestProperty("API-Key", hypixelKey);
         try {
             int status = c.getResponseCode();
+            if (hypixelKey != null) {
+                budget.update(c.getHeaderField("RateLimit-Limit"), c.getHeaderField("RateLimit-Remaining"),
+                        c.getHeaderField("RateLimit-Reset"), System.currentTimeMillis());
+            }
             if (hypixelKey == null && (status == 204 || status == 404)) return null;
             if (status == 429) {
                 long waitMs = retryDelayMs(c.getHeaderField("Retry-After"), c.getHeaderField("RateLimit-Reset"), hypixelKey == null);
                 synchronized (this) {
                     nextRequestAt = Math.max(nextRequestAt, System.currentTimeMillis() + waitMs);
                 }
+                if (hypixelKey != null) budget.exhausted(System.currentTimeMillis() + waitMs);
                 throw new RateLimited(hypixelKey == null ? "Mojang rate limit hit" : "Hypixel rate limit hit");
             }
             if (hypixelKey != null && (status == 401 || status == 403)) throw new ApiError("Hypixel rejected the API key");

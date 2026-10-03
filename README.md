@@ -35,6 +35,15 @@ and can be removed with one click or one key. Removing a player sends `/block ad
   Discord) or to a file, and import a co-host's. Importing only ever *adds*: your existing entries are
   kept, and anyone you trust is never pulled into your blocked list. Imported blocked players are
   flagged "Removed before" if they join. The import doesn't `/block` them on Hypixel.
+- **Auto-sync.** Every few minutes (default 3), and as soon as the party reaches its cap, the mod
+  quietly runs `/p list` to drop anyone it missed leaving. Its chat output is hidden and only changes
+  are logged. Paused during matches; turn it off or change the interval under OneConfig -> Actions.
+- **API counter.** The session card shows how many Hypixel requests you have left in the current
+  window (e.g. `API 212/300 left | resets in 3m`), green, yellow or red. With 5 or fewer left, checks
+  wait for the window to reset instead of hitting the rate limit.
+- **Party summary.** When the party ends you get a summary in chat and on the Party panel: running
+  time, peak size, total joins and peak join rate, leaves, and how many players were flagged,
+  removed (and how many automatically), kept and trusted.
 
 ## Hosting without commands
 
