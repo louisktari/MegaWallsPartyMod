@@ -480,7 +480,8 @@ public final class Panels {
 
     private Model members(PartyTracker party) {
         PartyRuntime rt = PartyMod.runtime;
-        Model m = new Model(Id.MEMBERS, "Party" + (party.members().isEmpty() ? "" : " (" + party.members().size() + ")"));
+        String size = !rt.inParty() ? "" : " (" + rt.partySize() + (rt.partyCap() > 0 ? "/" + rt.partyCap() : "") + ")";
+        Model m = new Model(Id.MEMBERS, "Party" + size);
         m.empty = "Not in a party";
         m.toolbar.add(new Button("Sync", ACCENT, rt::syncParty));
         m.toolbar.add(new Button("Re-check all", ACCENT, rt::recheckAll));
@@ -493,6 +494,7 @@ public final class Panels {
             warn.buttons.add(new Button("Fix", GOLD, () -> PartyMod.config.openGui()));
             m.cards.add(warn);
         }
+        if (rt.inParty()) m.cards.add(sessionCard(rt));
         // Newest first so the player who just joined is always at the top.
         List<Member> list = new ArrayList<>(party.members());
         Collections.reverse(list);
@@ -516,6 +518,32 @@ public final class Panels {
             m.cards.add(card);
         }
         return m;
+    }
+
+    /** Running time, size vs cap, and how fast people are joining. */
+    private static Card sessionCard(PartyRuntime rt) {
+        Card c = new Card();
+        long secs = Math.max(0, (System.currentTimeMillis() - rt.partyStartedAt()) / 1000);
+        String clock = secs >= 3600 ? String.format("%d:%02d:%02d", secs / 3600, secs / 60 % 60, secs % 60)
+                : String.format("%d:%02d", secs / 60, secs % 60);
+        int size = rt.partySize(), cap = rt.partyCap();
+        String fill = cap <= 0 ? StatFormat.WHITE + size
+                : (size >= cap ? StatFormat.RED : size >= cap * 0.9 ? StatFormat.YELLOW : StatFormat.GREEN) + size + StatFormat.GRAY + "/" + cap;
+        c.title = StatFormat.GRAY + "Running " + StatFormat.WHITE + clock + (rt.startApprox() ? StatFormat.GRAY + "+" : "")
+                + StatFormat.DARK_GRAY + " | " + StatFormat.GRAY + "Size " + fill;
+        double rate = rt.joinRate();
+        String line = StatFormat.GRAY + "Joins " + StatFormat.AQUA + String.format(java.util.Locale.ROOT, "%.1f/min", rate)
+                + StatFormat.DARK_GRAY + " | " + StatFormat.GRAY + "Total " + StatFormat.WHITE + rt.totalJoins();
+        if (cap > size && rate > 0.05) {
+            long etaMin = Math.round((cap - size) / rate);
+            line += StatFormat.DARK_GRAY + " | " + StatFormat.GRAY + "Full in ~" + StatFormat.WHITE + (etaMin >= 60 ? etaMin / 60 + "h" + etaMin % 60 + "m" : etaMin + "m");
+        }
+        c.lines.add(line);
+        if (size <= 1) c.lines.add(StatFormat.GRAY + "Just you so far - waiting for joins");
+        c.tooltip = java.util.Arrays.asList(StatFormat.LIGHT_PURPLE_SAFE + "Party session",
+                StatFormat.GRAY + (rt.startApprox() ? "Timer started when the mod first saw this party" : "Timer started when you created the party"),
+                StatFormat.GRAY + "Join rate is averaged over the last 5 minutes");
+        return c;
     }
 
     private Model log(PartyTracker party) {

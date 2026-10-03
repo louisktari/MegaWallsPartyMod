@@ -43,7 +43,7 @@ Four panels sit on your screen like extra chat windows:
 | Panel | Shows | Buttons |
 |---|---|---|
 | **To review** | A stat card per flagged player, strong flags first, with reasons in red or gold. The title flashes while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice) |
-| **Party** | A stat card for every member, newest first, with a verdict badge. New joins are tagged **NEW** for a minute. Shows a warning if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Promote** / **Demote** (when you lead), **Check**. Leader and moderators are tagged **[Leader]** / **[Mod]**. |
+| **Party** | A session card at the top (time running, size vs cap e.g. 42/100, joins per minute, total joins, estimated time until full), then a stat card for every member, newest first, with a verdict badge. `/stream open` starts the timer; a party with just you still shows. New joins are tagged **NEW** for a minute. Shows a warning if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Promote** / **Demote** (when you lead), **Check**. Leader and moderators are tagged **[Leader]** / **[Mod]**. |
 | **Party log** | Joins (green), leaves (red), flags and actions, in rank colours with timestamps. Newest at the bottom, like chat. | **Undo** on removals (10 s), **Clear** |
 | **Blocked players** | Everyone you've removed (saved across sessions), why, when, and by whom | hover for **Unblock**; **Copy lists**, **Paste lists**, **Forget all** |
 

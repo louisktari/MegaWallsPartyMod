@@ -121,6 +121,14 @@ public class ChatEventsTest {
     }
 
     @Test
+    public void publicPartyCreationRecognised() {
+        assertEvent("Created a public party! Players can join with /party join Louis", Type.PARTY_CREATED, "Louis");
+        assertEvent("Party is capped at 100 players.", Type.PARTY_CAP, "100");
+        assertEvent("Party is capped at 10 players.", Type.PARTY_CAP, "10");
+        assertEquals(Type.NONE, ChatEvents.parse("Party > Evil: Party is capped at 2 players.").type);
+    }
+
+    @Test
     public void throttleMessagesRecognised() {
         assertEquals(Type.THROTTLED, ChatEvents.parse("You are sending commands too fast! Please slow down.").type);
     }

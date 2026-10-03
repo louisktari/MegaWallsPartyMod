@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  */
 public final class ChatEvents {
 
-    public enum Type { JOIN, SELF_JOIN, LEAVE, REMOVED, MEMBER_COUNT, MEMBER_LIST, ROLE_CHANGE, NOT_IN_PARTY, DISBAND, COMPETITIVE_BLOCK, THROTTLED, NONE }
+    public enum Type { PARTY_CREATED, PARTY_CAP, JOIN, SELF_JOIN, LEAVE, REMOVED, MEMBER_COUNT, MEMBER_LIST, ROLE_CHANGE, NOT_IN_PARTY, DISBAND, COMPETITIVE_BLOCK, THROTTLED, NONE }
 
     public static final class Event {
         public final Type type;
@@ -49,6 +49,8 @@ public final class ChatEvents {
     private static final Pattern MEMBER_LIST = Pattern.compile("^Party (Leader|Moderators|Members): (.+)$");
     private static final Pattern PROMOTED = Pattern.compile("^" + NAME + " has (?:promoted|demoted) " + NAME + " to Party (Leader|Moderator|Member)[!.]?$");
     private static final Pattern TRANSFERRED = Pattern.compile("^The party was transferred to " + NAME + " by " + NAME + "[!.]?$");
+    private static final Pattern CREATED = Pattern.compile("^Created a (?:public|private) party! Players can join with /party join ([A-Za-z0-9_]{1,16})$");
+    private static final Pattern CAPPED = Pattern.compile("^Party is capped at (\\d{1,3}) players\\.$");
     private static final Pattern COMPETITIVE = Pattern.compile("^You cannot queue for this mode due to " + NAME + " not being able to play competitive games!$");
     private static final Pattern DISBANDED_BY = Pattern.compile("^" + NAME + " has disbanded the party!$");
     private static final Pattern KICKED_BY = Pattern.compile("^You have been kicked from the party by " + NAME + "$");
@@ -74,6 +76,8 @@ public final class ChatEvents {
         if (isPlayerChat(text)) return new Event(Type.NONE, "");
         Matcher m;
         if ((m = COMPETITIVE.matcher(text)).matches()) return new Event(Type.COMPETITIVE_BLOCK, m.group(1));
+        if ((m = CREATED.matcher(text)).matches()) return new Event(Type.PARTY_CREATED, m.group(1));
+        if ((m = CAPPED.matcher(text)).matches()) return new Event(Type.PARTY_CAP, m.group(1));
         if ((m = JOIN.matcher(text)).matches()) return new Event(Type.JOIN, m.group(1));
         if ((m = SELF_JOIN.matcher(text)).matches()) return new Event(Type.SELF_JOIN, m.group(1));
         if ((m = LEAVE.matcher(text)).matches()) return new Event(Type.LEAVE, m.group(1));

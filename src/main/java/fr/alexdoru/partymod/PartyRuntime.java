@@ -68,6 +68,59 @@ public final class PartyRuntime {
     private String lastKick = "";
     /** Who leads the party (may be you); empty when unknown. */
     private String leader = "";
+    /** True while you're in a party, even if nobody else has joined yet. */
+    private boolean inParty;
+    private long partyStartedAt;
+    /** True when the start time is only "since we noticed" (e.g. first seen via /p list). */
+    private boolean startApprox;
+    private int partyCap;
+    private int totalJoins;
+    private final java.util.ArrayDeque<Long> recentJoins = new java.util.ArrayDeque<>();
+
+    // ---------------------------------------------------------------- party session
+
+    public boolean inParty() {
+        return inParty;
+    }
+
+    /** Party size including you. */
+    public int partySize() {
+        return inParty ? party.members().size() + 1 : 0;
+    }
+
+    /** Max size from "Party is capped at N players.", or 0 if unknown. */
+    public int partyCap() {
+        return partyCap;
+    }
+
+    public long partyStartedAt() {
+        return partyStartedAt;
+    }
+
+    public boolean startApprox() {
+        return startApprox;
+    }
+
+    public int totalJoins() {
+        return totalJoins;
+    }
+
+    /** Joins per minute over the last 5 minutes (or since the party started, if sooner). */
+    public double joinRate() {
+        long now = System.currentTimeMillis();
+        while (!recentJoins.isEmpty() && now - recentJoins.peekFirst() > 300_000L) recentJoins.pollFirst();
+        long window = Math.min(300_000L, Math.max(60_000L, now - partyStartedAt));
+        return recentJoins.size() * 60_000.0 / window;
+    }
+
+    private void startParty(boolean approx) {
+        if (inParty) return;
+        inParty = true;
+        partyStartedAt = System.currentTimeMillis();
+        startApprox = approx;
+        totalJoins = 0;
+        recentJoins.clear();
+    }
     private long lastKickAt;
 
     public PartyRuntime(File dataDir) {
@@ -187,6 +240,8 @@ public final class PartyRuntime {
         Minecraft.getMinecraft().addScheduledTask(() -> {
             commands.clear();
             party.clearMembers();
+            inParty = false;
+            partyCap = 0;
             inMatch = false;
         });
     }
@@ -290,11 +345,28 @@ public final class PartyRuntime {
                 break;
             case SELF_JOIN:
                 party.clearMembers();
+                inParty = false;
+                startParty(true);
                 leader = e.value;
                 party.logSystem("You joined " + nameOf(e.value) + EnumChatFormatting.GRAY + "'s party");
                 commands.add("/p list");
                 break;
+            case PARTY_CREATED:
+                // /stream open: a brand-new party starts the timer; an existing one just goes public.
+                if (inParty) {
+                    party.logSystem("Party is now public");
+                } else {
+                    startParty(false);
+                    party.logSystem("Public party started");
+                }
+                leader = e.value;
+                break;
+            case PARTY_CAP:
+                partyCap = Integer.parseInt(e.value);
+                startParty(true);
+                break;
             case MEMBER_COUNT:
+                startParty(true);
                 syncSeen = new java.util.HashSet<>();
                 syncExpected = Integer.parseInt(e.value);
                 break;
@@ -395,10 +467,13 @@ public final class PartyRuntime {
     }
 
     private void endParty(String reason) {
+        boolean was = inParty || !party.members().isEmpty();
         leader = "";
-        if (party.members().isEmpty()) return;
+        inParty = false;
+        partyCap = 0;
+        partyStartedAt = 0;
         party.clearMembers();
-        party.logSystem(reason);
+        if (was) party.logSystem(reason);
     }
 
     private static String selfName() {
@@ -412,8 +487,13 @@ public final class PartyRuntime {
 
     private void onJoin(String name, boolean live, String display) {
         if (isSelf(name)) return;
+        startParty(!live);
         Member m = party.add(name, live);
         if (m == null) return;
+        if (live) {
+            totalJoins++;
+            recentJoins.addLast(System.currentTimeMillis());
+        }
         if (display != null) m.display = display;
         remember(name, display);
         if (live) party.log(m.shown() + " " + EnumChatFormatting.GREEN + "joined");

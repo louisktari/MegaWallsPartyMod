@@ -14,7 +14,8 @@ import java.util.Map;
  */
 public final class StatFormat {
     public static final String GREEN = "\u00a7a", YELLOW = "\u00a7e", RED = "\u00a7c", GOLD = "\u00a76",
-            GRAY = "\u00a77", DARK_GRAY = "\u00a78", WHITE = "\u00a7f", AQUA = "\u00a7b", RESET = "\u00a7r";
+            GRAY = "\u00a77", DARK_GRAY = "\u00a78", WHITE = "\u00a7f", AQUA = "\u00a7b", RESET = "\u00a7r",
+            LIGHT_PURPLE_SAFE = "\u00a7d";
 
     private static final Map<String, String> HYPIXEL_COLORS;
 
