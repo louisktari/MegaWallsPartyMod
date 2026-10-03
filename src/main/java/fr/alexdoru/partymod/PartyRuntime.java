@@ -105,12 +105,14 @@ public final class PartyRuntime {
         return totalJoins;
     }
 
-    /** Joins per minute over the last 5 minutes (or since the party started, if sooner). */
+    /** Join-rate window: joins counted over the last minute, so the figure is simply "joins in the last 60s". */
+    static final long JOIN_RATE_WINDOW_MS = 60_000L;
+
+    /** Joins per minute over the last minute. */
     public double joinRate() {
         long now = System.currentTimeMillis();
-        while (!recentJoins.isEmpty() && now - recentJoins.peekFirst() > 300_000L) recentJoins.pollFirst();
-        long window = Math.min(300_000L, Math.max(60_000L, now - partyStartedAt));
-        return recentJoins.size() * 60_000.0 / window;
+        while (!recentJoins.isEmpty() && now - recentJoins.peekFirst() > JOIN_RATE_WINDOW_MS) recentJoins.pollFirst();
+        return recentJoins.size() * 60_000.0 / JOIN_RATE_WINDOW_MS;
     }
 
     private void startParty(boolean approx) {

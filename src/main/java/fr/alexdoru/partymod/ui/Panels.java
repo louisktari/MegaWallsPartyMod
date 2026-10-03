@@ -542,7 +542,7 @@ public final class Panels {
         if (size <= 1) c.lines.add(StatFormat.GRAY + "Just you so far - waiting for joins");
         c.tooltip = java.util.Arrays.asList(StatFormat.LIGHT_PURPLE_SAFE + "Party session",
                 StatFormat.GRAY + (rt.startApprox() ? "Timer started when the mod first saw this party" : "Timer started when you created the party"),
-                StatFormat.GRAY + "Join rate is averaged over the last 5 minutes");
+                StatFormat.GRAY + "Join rate counts joins in the last minute");
         return c;
     }
 
