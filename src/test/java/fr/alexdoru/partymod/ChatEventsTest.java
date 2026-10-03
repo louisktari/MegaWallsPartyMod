@@ -63,6 +63,25 @@ public class ChatEventsTest {
     }
 
     @Test
+    public void roleChangesRecognised() {
+        ChatEvents.Event promote = ChatEvents.parse("[MVP++] Louis has promoted [MVP++] johnush to Party Moderator");
+        assertEquals(Type.ROLE_CHANGE, promote.type);
+        assertEquals("johnush", promote.value);
+        assertEquals(ChatEvents.Role.MODERATOR, promote.role);
+        ChatEvents.Event demote = ChatEvents.parse("Louis has demoted johnush to Party Member");
+        assertEquals(ChatEvents.Role.MEMBER, demote.role);
+        ChatEvents.Event transfer = ChatEvents.parse("The party was transferred to [VIP] Alex by [MVP+] Louis");
+        assertEquals("Alex", transfer.value);
+        assertEquals(ChatEvents.Role.LEADER, transfer.role);
+        ChatEvents.Event mods = ChatEvents.parse("Party Moderators: [MVP++] johnush \u25cf");
+        assertEquals(Type.MEMBER_LIST, mods.type);
+        assertEquals(ChatEvents.Role.MODERATOR, mods.role);
+        assertEquals(ChatEvents.Role.LEADER, ChatEvents.parse("Party Leader: [MVP++] Louis \u25cf").role);
+        // Player chat that merely quotes it is ignored.
+        assertEquals(Type.NONE, ChatEvents.parse("Party > Louis: has promoted Alex to Party Moderator").type);
+    }
+
+    @Test
     public void throttleMessagesRecognised() {
         assertEquals(Type.THROTTLED, ChatEvents.parse("You are sending commands too fast! Please slow down.").type);
     }

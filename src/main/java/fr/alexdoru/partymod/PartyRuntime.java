@@ -60,6 +60,8 @@ public final class PartyRuntime {
     private java.util.Set<String> syncSeen;
     private int syncExpected;
     private String lastKick = "";
+    /** Who leads the party (may be you); empty when unknown. */
+    private String leader = "";
     private long lastKickAt;
 
     public PartyRuntime(File dataDir) {
@@ -243,6 +245,7 @@ public final class PartyRuntime {
                 break;
             case SELF_JOIN:
                 party.clearMembers();
+                leader = e.value;
                 party.logSystem("You joined " + nameOf(e.value) + EnumChatFormatting.GRAY + "'s party");
                 commands.add("/p list");
                 break;
@@ -253,10 +256,27 @@ public final class PartyRuntime {
             case MEMBER_LIST: {
                 String formatted = event.message.getFormattedText();
                 for (String name : ChatEvents.names(e.value)) {
+                    if (e.role == ChatEvents.Role.LEADER) leader = name;
                     onJoin(name, false, ChatEvents.formattedName(formatted, name));
+                    Member listed = party.get(name);
+                    if (listed != null) listed.role = e.role;
                     if (syncSeen != null) syncSeen.add(name.toLowerCase(java.util.Locale.ROOT));
                 }
                 if (syncSeen != null && syncSeen.size() >= syncExpected) finishSync();
+                break;
+            }
+            case ROLE_CHANGE: {
+                if (e.role == ChatEvents.Role.LEADER) {
+                    Member old = party.get(leader);
+                    if (old != null) old.role = ChatEvents.Role.MEMBER;
+                    leader = e.value;
+                }
+                Member changed = party.get(e.value);
+                if (changed != null) changed.role = e.role;
+                String what = e.role == ChatEvents.Role.LEADER ? EnumChatFormatting.GOLD + "is now Party Leader"
+                        : e.role == ChatEvents.Role.MODERATOR ? EnumChatFormatting.DARK_GREEN + "promoted to Moderator"
+                        : EnumChatFormatting.GRAY + "demoted to Member";
+                party.log(nameOf(e.value) + " " + what);
                 break;
             }
             case NOT_IN_PARTY:
@@ -322,6 +342,7 @@ public final class PartyRuntime {
     }
 
     private void endParty(String reason) {
+        leader = "";
         if (party.members().isEmpty()) return;
         party.clearMembers();
         party.logSystem(reason);
@@ -549,6 +570,19 @@ public final class PartyRuntime {
             m.status = Status.DISMISSED;
         }
         party.log(EnumChatFormatting.GREEN + "Undid removal of " + nameOf(name) + EnumChatFormatting.GREEN + (kickPending ? "" : " - re-invited"));
+    }
+
+    /** True when you lead the party (or we don't know yet, so the buttons stay available). */
+    public boolean selfIsLeader() {
+        return leader.isEmpty() || isSelf(leader);
+    }
+
+    public void promote(String name) {
+        if (ChatEvents.validName(name)) commands.add("/p promote " + name);
+    }
+
+    public void demote(String name) {
+        if (ChatEvents.validName(name)) commands.add("/p demote " + name);
     }
 
     public void dismiss(String name) {

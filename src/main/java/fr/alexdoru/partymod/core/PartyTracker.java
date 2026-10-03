@@ -35,6 +35,7 @@ public final class PartyTracker {
         public long removedAt;
         /** When a rate-limited lookup will be retried, or 0. */
         public long retryAt;
+        public ChatEvents.Role role = ChatEvents.Role.MEMBER;
         public final long joinedAt = System.currentTimeMillis();
 
         /** Rank-coloured name: from stats when known, else from the join message, else gray. */

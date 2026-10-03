@@ -417,7 +417,9 @@ public final class Panels {
     private static Card playerCard(Member m, boolean showReasons) {
         Card card = new Card();
         long now = System.currentTimeMillis();
-        card.title = (m.isNew(now) ? "\u00a7d\u00a7lNEW " : "") + m.shown();
+        String role = m.role == fr.alexdoru.partymod.core.ChatEvents.Role.LEADER ? StatFormat.GOLD + "[Leader] "
+                : m.role == fr.alexdoru.partymod.core.ChatEvents.Role.MODERATOR ? "\u00a72[Mod] " : "";
+        card.title = (m.isNew(now) ? "\u00a7d\u00a7lNEW " : "") + role + m.shown();
         switch (m.status) {
             case CHECKING:
                 card.badge = StatFormat.YELLOW + (m.retryAt > now ? "retrying..." : "checking...");
@@ -503,6 +505,13 @@ public final class Panels {
             }
             if (member.status == Status.TRUSTED) card.buttons.add(new Button("Untrust", MUTED, () -> rt.untrust(name)));
             else card.buttons.add(new Button("Trust", BLUE, () -> rt.trust(name)));
+            if (rt.selfIsLeader() && member.status != Status.REMOVED) {
+                if (member.role == fr.alexdoru.partymod.core.ChatEvents.Role.MEMBER) {
+                    card.buttons.add(new Button("Promote", GREEN, () -> rt.promote(name)));
+                } else if (member.role == fr.alexdoru.partymod.core.ChatEvents.Role.MODERATOR) {
+                    card.buttons.add(new Button("Demote", MUTED, () -> rt.demote(name)));
+                }
+            }
             card.buttons.add(new Button("Check", ACCENT, () -> rt.recheck(name)));
             m.cards.add(card);
         }

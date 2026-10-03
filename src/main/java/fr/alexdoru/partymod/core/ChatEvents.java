@@ -10,16 +10,31 @@ import java.util.regex.Pattern;
  */
 public final class ChatEvents {
 
-    public enum Type { JOIN, SELF_JOIN, LEAVE, REMOVED, MEMBER_COUNT, MEMBER_LIST, NOT_IN_PARTY, DISBAND, COMPETITIVE_BLOCK, THROTTLED, NONE }
+    public enum Type { JOIN, SELF_JOIN, LEAVE, REMOVED, MEMBER_COUNT, MEMBER_LIST, ROLE_CHANGE, NOT_IN_PARTY, DISBAND, COMPETITIVE_BLOCK, THROTTLED, NONE }
 
     public static final class Event {
         public final Type type;
         /** Player name, or for MEMBER_LIST the raw list of names after the colon. */
         public final String value;
+        /** For MEMBER_LIST and ROLE_CHANGE: the party role involved. */
+        public final Role role;
 
         Event(Type type, String value) {
+            this(type, value, null);
+        }
+
+        Event(Type type, String value, Role role) {
             this.type = type;
             this.value = value;
+            this.role = role;
+        }
+    }
+
+    public enum Role {
+        LEADER, MODERATOR, MEMBER;
+
+        static Role of(String word) {
+            return word.startsWith("Leader") ? LEADER : word.startsWith("Moderator") ? MODERATOR : MEMBER;
         }
     }
 
@@ -31,7 +46,9 @@ public final class ChatEvents {
     private static final Pattern LEAVE = Pattern.compile("^" + NAME + " has left the party\\.$");
     private static final Pattern REMOVED = Pattern.compile("^" + NAME + " (?:has been removed from the party|was removed from (?:your|the) party because they disconnected)\\.$");
     private static final Pattern MEMBER_COUNT = Pattern.compile("^Party Members \\((\\d{1,3})\\)$");
-    private static final Pattern MEMBER_LIST = Pattern.compile("^Party (?:Leader|Moderators|Members): (.+)$");
+    private static final Pattern MEMBER_LIST = Pattern.compile("^Party (Leader|Moderators|Members): (.+)$");
+    private static final Pattern PROMOTED = Pattern.compile("^" + NAME + " has (?:promoted|demoted) " + NAME + " to Party (Leader|Moderator|Member)[!.]?$");
+    private static final Pattern TRANSFERRED = Pattern.compile("^The party was transferred to " + NAME + " by " + NAME + "[!.]?$");
     private static final Pattern COMPETITIVE = Pattern.compile("^You cannot queue for this mode due to " + NAME + " not being able to play competitive games!$");
     private static final Pattern DISBANDED_BY = Pattern.compile("^" + NAME + " has disbanded the party!$");
     private static final Pattern KICKED_BY = Pattern.compile("^You have been kicked from the party by " + NAME + "$");
@@ -47,7 +64,9 @@ public final class ChatEvents {
         if ((m = SELF_JOIN.matcher(text)).matches()) return new Event(Type.SELF_JOIN, m.group(1));
         if ((m = LEAVE.matcher(text)).matches()) return new Event(Type.LEAVE, m.group(1));
         if ((m = REMOVED.matcher(text)).matches()) return new Event(Type.REMOVED, m.group(1));
-        if ((m = MEMBER_LIST.matcher(text)).matches()) return new Event(Type.MEMBER_LIST, m.group(1));
+        if ((m = MEMBER_LIST.matcher(text)).matches()) return new Event(Type.MEMBER_LIST, m.group(2), Role.of(m.group(1)));
+        if ((m = PROMOTED.matcher(text)).matches()) return new Event(Type.ROLE_CHANGE, m.group(2), Role.of(m.group(3)));
+        if ((m = TRANSFERRED.matcher(text)).matches()) return new Event(Type.ROLE_CHANGE, m.group(1), Role.LEADER);
         if ((m = MEMBER_COUNT.matcher(text)).matches()) return new Event(Type.MEMBER_COUNT, m.group(1));
         if (text.equals("That player is not in your party!")) return new Event(Type.NOT_IN_PARTY, "");
         if (DISBANDED_BY.matcher(text).matches() || KICKED_BY.matcher(text).matches()
