@@ -38,21 +38,22 @@ and can be removed with one click or one key. Removing a player sends `/block ad
 - **Auto-sync.** Every few minutes (default 3), and as soon as the party reaches its cap, the mod
   quietly runs `/p list` to drop anyone it missed leaving. Its chat output is hidden and only changes
   are logged. Paused during matches; turn it off or change the interval under OneConfig -> Actions.
-- **API counter.** The session card shows how many Hypixel requests you have left in the current
+- **API counter.** The Party overview shows how many Hypixel requests you have left in the current
   window (e.g. `API 212/300 left | resets in 3m`), green, yellow or red. With 5 or fewer left, checks
   wait for the window to reset instead of hitting the rate limit.
-- **Party summary.** When the party ends you get a summary in chat and on the Party panel: running
+- **Party summary.** When the party ends you get a summary in chat and on the Party overview: running
   time, peak size, total joins and peak join rate, leaves, and how many players were flagged,
   removed (and how many automatically), kept and trusted.
 
 ## Hosting without commands
 
-Four panels sit on your screen like extra chat windows:
+Five panels sit on your screen like extra chat windows:
 
 | Panel | Shows | Buttons |
 |---|---|---|
 | **To review** | A stat card per flagged player, strong flags first, with reasons in red or gold. The title flashes while anyone is waiting. | **Kick**, **Keep**, **Trust** on each card; **Kick all** (click twice) |
-| **Party** | A session card at the top (time running, size vs cap e.g. 42/100, joins per minute, total joins, estimated time until full), then a stat card for every member, newest first, with a verdict badge. `/stream open` starts the timer; a party with just you still shows. New joins are tagged **NEW** for a minute. Shows a warning if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a card for **Kick**, **Trust**, **Promote** / **Demote** (when you lead), **Check**. Leader and moderators are tagged **[Leader]** / **[Mod]**. |
+| **Party overview** | Time running, size vs cap (e.g. 42/100), joins in the last minute, total joins, estimated time until full and your Hypixel API budget. Below that, the party leader and every moderator. `/stream open` starts the timer; a party with just you still shows. After a party ends it shows the summary. Warns if your API key is missing or rejected. | **Sync**, **Re-check all**, **Settings**; hover a moderator for **Demote** / **Kick** (when you lead) |
+| **Party feed** | A stat card for every member, newest join first, with a verdict badge. New joins are tagged **NEW** for a minute; the leader and moderators are tagged **[Leader]** / **[Mod]**. | hover a card for **Kick**, **Trust**, **Promote** / **Demote** (when you lead), **Check** |
 | **Party log** | Joins (green), leaves (red), flags and actions, in rank colours with timestamps. Newest at the bottom, like chat. | **Undo** on removals (10 s), **Clear** |
 | **Blocked players** | Everyone you've removed (saved across sessions), why, when, and by whom | hover for **Unblock**; **Copy lists**, **Paste lists**, **Forget all** |
 

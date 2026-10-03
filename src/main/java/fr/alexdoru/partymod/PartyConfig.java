@@ -168,7 +168,12 @@ public final class PartyConfig extends Config {
     @Switch(name = "To review", category = "Overlays", subcategory = "Panels")
     public boolean showReview = true;
 
-    @Switch(name = "Party members", category = "Overlays", subcategory = "Panels")
+    @Switch(name = "Party overview", description = "Running time, size, join rate, API budget, leader and moderators. Default: on",
+            category = "Overlays", subcategory = "Panels")
+    public boolean showOverview = true;
+
+    @Switch(name = "Party feed", description = "A stat card for everyone in the party, newest join first. Default: on",
+            category = "Overlays", subcategory = "Panels")
     public boolean showMembers = true;
 
     @Switch(name = "Party log", category = "Overlays", subcategory = "Panels")
@@ -205,8 +210,8 @@ public final class PartyConfig extends Config {
     };
 
     // Panel layout, changed by dragging/folding and saved with the profile.
-    public float reviewX, reviewY, membersX, membersY, logX, logY, blockedX, blockedY;
-    public boolean foldReview, foldMembers, foldLog, foldBlocked;
+    public float overviewX, overviewY, reviewX, reviewY, membersX, membersY, logX, logY, blockedX, blockedY;
+    public boolean foldOverview, foldReview, foldMembers, foldLog, foldBlocked;
 
     // ================================================================ Trusted players
     @Info(type = InfoType.INFO, size = 2, category = "Trusted players", subcategory = "About",
@@ -278,10 +283,13 @@ public final class PartyConfig extends Config {
     }
 
     private void resetPositions() {
+        // Review on the left; overview with the join feed underneath it in the middle.
+        overviewX = 0.28f;
+        overviewY = 0.06f;
         reviewX = 0.005f;
         reviewY = 0.08f;
-        membersX = 0.005f;
-        membersY = 0.40f;
+        membersX = 0.28f;
+        membersY = 0.32f;
         logX = 0.78f;
         logY = 0.55f;
         blockedX = 0.78f;

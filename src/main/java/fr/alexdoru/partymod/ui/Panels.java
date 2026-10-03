@@ -28,14 +28,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Four on-screen panels that behave like extra chat windows. Always visible while you
+ * Five on-screen panels that behave like extra chat windows. Always visible while you
  * play; open chat (or press the overlay key) and they become interactive: drag a title
  * bar to move a panel, scroll with the mouse wheel, hover a player for full stats, and
  * click buttons to act.
  */
 public final class Panels {
 
-    public enum Id { REVIEW, MEMBERS, LOG, BLOCKED }
+    public enum Id { OVERVIEW, REVIEW, MEMBERS, LOG, BLOCKED }
+
+    /** The overview holds a few fixed cards plus one per moderator, so it gets more room than the stat panels. */
+    private static final int OVERVIEW_MAX_CARDS = 15;
 
     private static final int LINE = 10, HEADER = 12, PAD = 3, CARD_GAP = 3;
     private static final int TEXT = 0xFFE8E8F0, MUTED = 0xFF9AA0B4, ACCENT = 0xFFC78BFF;
@@ -227,6 +230,7 @@ public final class Panels {
         tooltip = null;
         if (System.currentTimeMillis() - armedAt > 3000) armed = "";
         PartyTracker party = PartyMod.runtime.party;
+        if (c.showOverview) draw(overview(party), sr, mouseX, mouseY, interactive);
         if (c.showReview) draw(review(party), sr, mouseX, mouseY, interactive);
         if (c.showMembers) draw(members(party), sr, mouseX, mouseY, interactive);
         if (c.showLog) draw(log(party), sr, mouseX, mouseY, interactive);
@@ -256,7 +260,7 @@ public final class Panels {
         float scale = c.panelScale;
         int width = (int) c.panelWidth;
         int textWidth = width - PAD * 2;
-        int maxCards = (int) c.maxRows;
+        int maxCards = model.id == Id.OVERVIEW ? Math.max((int) c.maxRows, OVERVIEW_MAX_CARDS) : (int) c.maxRows;
 
         int maxStart = Math.max(0, model.cards.size() - maxCards);
         int offset = Math.max(0, Math.min(scroll.getOrDefault(model.id, 0), maxStart));
@@ -478,10 +482,11 @@ public final class Panels {
         return m;
     }
 
-    private Model members(PartyTracker party) {
+    /** Party overview: session stats, leader and moderators. The join feed lives in its own panel. */
+    private Model overview(PartyTracker party) {
         PartyRuntime rt = PartyMod.runtime;
         String size = !rt.inParty() ? "" : " (" + rt.partySize() + (rt.partyCap() > 0 ? "/" + rt.partyCap() : "") + ")";
-        Model m = new Model(Id.MEMBERS, "Party" + size);
+        Model m = new Model(Id.OVERVIEW, "Party overview" + size);
         m.empty = "Not in a party";
         m.toolbar.add(new Button("Sync", ACCENT, rt::syncParty));
         m.toolbar.add(new Button("Re-check all", ACCENT, rt::recheckAll));
@@ -494,14 +499,67 @@ public final class Panels {
             warn.buttons.add(new Button("Fix", GOLD, () -> PartyMod.config.openGui()));
             m.cards.add(warn);
         }
-        if (rt.inParty()) m.cards.add(sessionCard(rt));
-        else if (rt.lastSummary() != null) {
+        if (rt.inParty()) {
+            m.cards.add(sessionCard(rt));
+            addRoles(m, party, rt);
+        } else if (rt.lastSummary() != null) {
             Card last = new Card();
             last.title = StatFormat.LIGHT_PURPLE_SAFE + "Last party";
             List<String> lines = rt.lastSummary();
             last.lines.addAll(lines);
             m.cards.add(last);
         }
+        return m;
+    }
+
+    /** Leader line, then one row per moderator (hover for Demote / Kick when you lead). */
+    private static void addRoles(Model m, PartyTracker party, PartyRuntime rt) {
+        String leader = rt.leader();
+        Card lead = new Card();
+        if (leader.isEmpty()) {
+            lead.title = StatFormat.GOLD + "Leader " + StatFormat.GRAY + "unknown - press Sync";
+        } else {
+            String shown = rt.nameOf(leader);
+            // Before a /p list we only know your plain name; show it in gold like "Removed by <you>".
+            if (rt.isSelf(leader) && shown.equals(StatFormat.GRAY + leader)) shown = StatFormat.GOLD + leader;
+            lead.title = StatFormat.GOLD + "Leader " + StatFormat.RESET + shown
+                    + (rt.isSelf(leader) ? StatFormat.GRAY + " (you)" : "");
+        }
+        m.cards.add(lead);
+
+        List<Member> mods = new ArrayList<>();
+        for (Member member : party.members()) {
+            if (member.role == fr.alexdoru.partymod.core.ChatEvents.Role.MODERATOR && member.status != Status.REMOVED) mods.add(member);
+        }
+        Card header = new Card();
+        header.title = "\u00a72Moderators" + StatFormat.GRAY + " (" + mods.size() + ")";
+        if (mods.isEmpty()) {
+            header.lines.add(StatFormat.GRAY + (rt.selfIsLeader()
+                    ? "None yet - hover a player in the feed to Promote"
+                    : "None"));
+        }
+        m.cards.add(header);
+        long now = System.currentTimeMillis();
+        for (Member mod : mods) {
+            Card card = new Card();
+            card.title = "  \u00a72[Mod] " + StatFormat.RESET + mod.shown();
+            card.tooltip = tooltip(mod, now);
+            if (rt.selfIsLeader()) {
+                card.buttonsOnHover = true;
+                String name = mod.name;
+                card.buttons.add(new Button("Demote", MUTED, () -> rt.demote(name)));
+                card.buttons.add(new Button("Kick", RED, () -> rt.remove(name, "", false, false)));
+            }
+            m.cards.add(card);
+        }
+    }
+
+    /** The join feed: a stat card for every member, newest first. */
+    private Model members(PartyTracker party) {
+        PartyRuntime rt = PartyMod.runtime;
+        int count = party.members().size();
+        Model m = new Model(Id.MEMBERS, "Party feed" + (count == 0 ? "" : " (" + count + ")"));
+        m.empty = rt.inParty() ? "Waiting for joins" : "Not in a party";
         // Newest first so the player who just joined is always at the top.
         List<Member> list = new ArrayList<>(party.members());
         Collections.reverse(list);
@@ -636,6 +694,7 @@ public final class Panels {
     private static boolean folded(Id id) {
         PartyConfig c = PartyMod.config;
         switch (id) {
+            case OVERVIEW: return c.foldOverview;
             case REVIEW: return c.foldReview;
             case MEMBERS: return c.foldMembers;
             case LOG: return c.foldLog;
@@ -646,6 +705,7 @@ public final class Panels {
     private static void toggleFold(Id id) {
         PartyConfig c = PartyMod.config;
         switch (id) {
+            case OVERVIEW: c.foldOverview = !c.foldOverview; break;
             case REVIEW: c.foldReview = !c.foldReview; break;
             case MEMBERS: c.foldMembers = !c.foldMembers; break;
             case LOG: c.foldLog = !c.foldLog; break;
@@ -659,6 +719,7 @@ public final class Panels {
         PartyConfig c = PartyMod.config;
         float fx, fy;
         switch (id) {
+            case OVERVIEW: fx = c.overviewX; fy = c.overviewY; break;
             case LOG: fx = c.logX; fy = c.logY; break;
             case MEMBERS: fx = c.membersX; fy = c.membersY; break;
             case REVIEW: fx = c.reviewX; fy = c.reviewY; break;
@@ -671,6 +732,7 @@ public final class Panels {
         PartyConfig c = PartyMod.config;
         float fx = clamp(x / sr.getScaledWidth(), 0, 0.98f), fy = clamp(y / sr.getScaledHeight(), 0, 0.98f);
         switch (id) {
+            case OVERVIEW: c.overviewX = fx; c.overviewY = fy; break;
             case LOG: c.logX = fx; c.logY = fy; break;
             case MEMBERS: c.membersX = fx; c.membersY = fy; break;
             case REVIEW: c.reviewX = fx; c.reviewY = fy; break;

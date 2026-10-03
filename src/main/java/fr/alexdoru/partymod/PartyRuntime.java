@@ -75,7 +75,7 @@ public final class PartyRuntime {
     private int partyCap;
     /** Timer, joins, peaks and moderation counts for the current party. */
     public final SessionStats session = new SessionStats();
-    /** Summary of the last party that ended, shown on the Party panel until a new one starts. */
+    /** Summary of the last party that ended, shown on the Party overview until a new one starts. */
     private List<String> lastSummary;
 
     // Auto-sync: a quiet /p list every few minutes and when the party fills up.
@@ -423,6 +423,7 @@ public final class PartyRuntime {
                 String formatted = event.message.getFormattedText();
                 for (String name : ChatEvents.names(e.value)) {
                     if (e.role == ChatEvents.Role.LEADER) leader = name;
+                    if (isSelf(name)) remember(name, ChatEvents.formattedName(formatted, name));
                     onJoin(name, false, ChatEvents.formattedName(formatted, name));
                     Member listed = party.get(name);
                     if (listed != null) listed.role = e.role;
@@ -548,8 +549,13 @@ public final class PartyRuntime {
         return mc.thePlayer == null ? "" : mc.thePlayer.getName();
     }
 
-    private boolean isSelf(String name) {
+    public boolean isSelf(String name) {
         return selfName().equalsIgnoreCase(name);
+    }
+
+    /** Current party leader's name, or "" until a /p list or role message has told us. */
+    public String leader() {
+        return leader;
     }
 
     private void onJoin(String name, boolean live, String display) {
