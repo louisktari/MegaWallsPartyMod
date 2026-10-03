@@ -154,7 +154,7 @@ public final class PartyRuntime {
         chat(EnumChatFormatting.GREEN + "Imported from " + source + ": " + r.trustedAdded + " trusted, " + r.blockedAdded
                 + " blocked" + (r.skipped > 0 ? EnumChatFormatting.GRAY + " (" + r.skipped + " invalid entries skipped)" : "")
                 + EnumChatFormatting.GREEN + ". Existing entries were kept.");
-        party.log(EnumChatFormatting.GREEN + "Imported lists: +" + r.trustedAdded + " trusted, +" + r.blockedAdded + " blocked");
+        party.logSystem("Imported lists: +" + r.trustedAdded + " trusted, +" + r.blockedAdded + " blocked");
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -243,7 +243,7 @@ public final class PartyRuntime {
                 break;
             case SELF_JOIN:
                 party.clearMembers();
-                party.log("You joined " + e.value + "'s party");
+                party.logSystem("You joined " + nameOf(e.value) + EnumChatFormatting.GRAY + "'s party");
                 commands.add("/p list");
                 break;
             case MEMBER_COUNT:
@@ -281,7 +281,7 @@ public final class PartyRuntime {
                 break;
             case THROTTLED:
                 commands.throttled(System.currentTimeMillis(), 3000);
-                party.log(EnumChatFormatting.YELLOW + "Hypixel throttled commands; retrying in 3s");
+                party.logSystem("Hypixel throttled commands; retrying in 3s");
                 break;
             default:
                 break;
@@ -324,7 +324,7 @@ public final class PartyRuntime {
     private void endParty(String reason) {
         if (party.members().isEmpty()) return;
         party.clearMembers();
-        party.log(reason);
+        party.logSystem(reason);
     }
 
     private static String selfName() {
@@ -625,7 +625,7 @@ public final class PartyRuntime {
             return;
         }
         commands.add("/p list");
-        party.log("Syncing party list");
+        party.logSystem("Syncing party list");
     }
 
     // ---------------------------------------------------------------- queue guard

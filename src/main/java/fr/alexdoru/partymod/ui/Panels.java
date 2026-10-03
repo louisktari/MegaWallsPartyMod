@@ -40,6 +40,8 @@ public final class Panels {
     private static final int LINE = 10, HEADER = 12, PAD = 3, CARD_GAP = 3;
     private static final int TEXT = 0xFFE8E8F0, MUTED = 0xFF9AA0B4, ACCENT = 0xFFC78BFF;
     private static final int RED = 0xFFFF6B6B, GREEN = 0xFF7EE0A1, GOLD = 0xFFFFC857, BLUE = 0xFF8EC5FF;
+    /** Exactly Minecraft's &c. */
+    private static final int MC_RED = 0xFFFF5555;
 
     static final class Button {
         final String label, confirmKey;
@@ -509,12 +511,12 @@ public final class Panels {
 
     private Model log(PartyTracker party) {
         Model m = new Model(Id.LOG, "Party log");
-        m.toolbar.add(new Button("Clear", MUTED, party::clearLog));
+        m.toolbar.add(new Button("Clear", MC_RED, party::clearLog));
         long now = System.currentTimeMillis();
         PartyRuntime rt = PartyMod.runtime;
         for (PartyTracker.LogEntry entry : party.log(100)) {
             Card card = new Card();
-            String line = StatFormat.DARK_GRAY + entry.time + " " + StatFormat.RESET + entry.text;
+            String line = StatFormat.GRAY + "[" + entry.time + "] " + StatFormat.RESET + entry.text;
             int room = (int) PartyMod.config.panelWidth - PAD * 2 - (entry.undoable(now) ? 40 : 0);
             // Log entries use the title slot; long ones wrap onto detail lines.
             List<String> wrapped = Minecraft.getMinecraft().fontRendererObj.listFormattedStringToWidth(line, room);
@@ -538,7 +540,7 @@ public final class Panels {
         m.empty = "Nobody blocked yet";
         m.toolbar.add(new Button("Copy lists", ACCENT, rt::exportToClipboard));
         m.toolbar.add(new Button("Paste lists", ACCENT, rt::importFromClipboard));
-        m.toolbar.add(new Button("Forget all", MUTED, rt::clearHistory, "forget-all"));
+        m.toolbar.add(new Button("Forget all", MC_RED, rt::clearHistory, "forget-all"));
         long now = System.currentTimeMillis();
         for (BlockHistory.Entry b : rt.history.recent(100)) {
             Card card = new Card();

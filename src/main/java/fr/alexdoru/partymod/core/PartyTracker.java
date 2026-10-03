@@ -131,6 +131,11 @@ public final class PartyTracker {
         return log(line, null);
     }
 
+    /** A non-player event (party ended, syncing...), prefixed with a red [SYSTEM] tag. */
+    public LogEntry logSystem(String line) {
+        return log(StatFormat.RED + "[SYSTEM] " + StatFormat.GRAY + line, null);
+    }
+
     public LogEntry log(String line, String undoName) {
         LogEntry e = new LogEntry(line, clock.format(new Date()), undoName);
         log.addFirst(e);
